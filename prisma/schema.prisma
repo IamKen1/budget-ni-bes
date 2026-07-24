@@ -1,0 +1,90 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum AccountType {
+  BANK
+  CASH
+  EWALLET
+}
+
+enum CategoryKind {
+  EXPENSE
+  SAVINGS
+}
+
+enum EntryType {
+  INCOME
+  EXPENSE
+  SAVINGS_DEPOSIT
+  SAVINGS_WITHDRAW
+  TRANSFER
+}
+
+enum Person {
+  JENNA
+  KENNETH
+  SHARED
+}
+
+model Account {
+  id        String      @id @default(cuid())
+  name      String      @unique
+  type      AccountType
+  archived  Boolean     @default(false)
+  sortOrder Int         @default(0)
+  createdAt DateTime    @default(now())
+  /// Monthly budget deposit target for this account (e.g. salary budgeted into
+  /// the spending account each month). 0 = no target set.
+  monthlyTarget Decimal @default(0) @db.Decimal(12, 2)
+
+  transactions Transaction[] @relation("AccountTransactions")
+  transfersTo  Transaction[] @relation("TransferDestination")
+}
+
+model Category {
+  id            String       @id @default(cuid())
+  name          String       @unique
+  kind          CategoryKind
+  monthlyTarget Decimal      @default(0) @db.Decimal(12, 2)
+  /// Long-term savings goal for this fund (SAVINGS kind only). 0 = no goal set.
+  goalTarget    Decimal      @default(0) @db.Decimal(12, 2)
+  archived      Boolean      @default(false)
+  sortOrder     Int          @default(0)
+  createdAt     DateTime     @default(now())
+
+  transactions Transaction[]
+}
+
+model Transaction {
+  id          String    @id @default(cuid())
+  date        DateTime
+  entryType   EntryType
+  amount      Decimal   @db.Decimal(12, 2)
+  person      Person    @default(SHARED)
+  particulars String?
+
+  accountId String
+  account   Account @relation("AccountTransactions", fields: [accountId], references: [id])
+
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id])
+
+  toAccountId String?
+  toAccount   Account? @relation("TransferDestination", fields: [toAccountId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([date])
+  @@index([categoryId])
+  @@index([accountId])
+}
