@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import type {
   SerializedAccount,
@@ -7,6 +9,9 @@ import { formatMoney } from "@/lib/format";
 import { accountTypeLabel } from "@/lib/labels";
 import { logout } from "@/lib/actions/session";
 import { ProgressBar } from "@/components/ProgressBar";
+import { MaskableAmount } from "@/components/MaskableAmount";
+import { BalanceVisibilityToggle } from "@/components/BalanceVisibilityToggle";
+import { useBalanceVisibility } from "@/components/BalanceVisibilityContext";
 import { ArchiveToggleButton } from "@/components/ArchiveToggleButton";
 import { EditAccountTarget } from "@/components/EditAccountTarget";
 import { EditCategoryTargets } from "@/components/EditCategoryTargets";
@@ -14,6 +19,7 @@ import { AddAccountForm } from "@/components/AddAccountForm";
 import { AddCategoryForm } from "@/components/AddCategoryForm";
 import { toggleArchiveAccount } from "@/lib/actions/accounts";
 import { toggleArchiveCategory } from "@/lib/actions/categories";
+import { useDesktopFilter } from "@/components/desktop/DesktopFilterContext";
 
 export function DesktopSidebar({
   cutoff,
@@ -36,6 +42,10 @@ export function DesktopSidebar({
   expenseCategories: CategoryProgress[];
   savingsCategories: CategoryProgress[];
 }) {
+  const { filter, setFilter } = useDesktopFilter();
+  const { visible } = useBalanceVisibility();
+  const money = (n: number) => (visible ? formatMoney(n) : "₱ • • •");
+
   return (
     <aside className="flex w-72 flex-shrink-0 flex-col overflow-y-auto border-r border-zinc-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-950">
       <div className="flex items-center justify-between">
@@ -80,20 +90,25 @@ export function DesktopSidebar({
       </div>
 
       <div className="mt-3 rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-700 px-3 py-2.5 text-white">
-        <p className="text-[10px] font-medium text-emerald-100">Total Balance</p>
-        <p className="text-lg font-semibold tracking-tight">{formatMoney(totalBalance)}</p>
+        <div className="flex items-center justify-between">
+          <p className="text-[10px] font-medium text-emerald-100">Total Balance</p>
+          <BalanceVisibilityToggle className="flex h-6 w-6 items-center justify-center rounded-full bg-white/15 text-white transition active:scale-90" />
+        </div>
+        <p className="text-lg font-semibold tracking-tight">
+          <MaskableAmount value={totalBalance} />
+        </p>
         <div className="mt-1.5 flex gap-3 text-[10px]">
           <div>
             <p className="text-emerald-100">Income</p>
-            <p className="font-semibold">{formatMoney(income)}</p>
+            <p className="font-semibold"><MaskableAmount value={income} /></p>
           </div>
           <div>
             <p className="text-emerald-100">Expenses</p>
-            <p className="font-semibold">{formatMoney(expense)}</p>
+            <p className="font-semibold"><MaskableAmount value={expense} /></p>
           </div>
           <div>
             <p className="text-emerald-100">Saved</p>
-            <p className="font-semibold">{formatMoney(saved)}</p>
+            <p className="font-semibold"><MaskableAmount value={saved} /></p>
           </div>
         </div>
       </div>
@@ -104,13 +119,33 @@ export function DesktopSidebar({
             Accounts
           </h2>
         </div>
-        <div className="mt-1.5 flex flex-col gap-1">
-          {accounts.map((a) => (
-            <div key={a.id} className="flex items-center justify-between text-xs">
-              <span className="truncate text-zinc-600 dark:text-zinc-300">{a.name}</span>
-              <span className="flex-shrink-0 font-medium">{formatMoney(a.balance)}</span>
-            </div>
-          ))}
+        <div className="mt-1.5 flex flex-col gap-0.5">
+          {accounts.map((a) => {
+            const active = filter?.type === "account" && filter.id === a.id;
+            return (
+              <button
+                key={a.id}
+                type="button"
+                onClick={() =>
+                  setFilter(active ? null : { type: "account", id: a.id, label: a.name })
+                }
+                className={`flex items-center justify-between rounded-lg px-1.5 py-1 text-xs transition ${
+                  active
+                    ? "bg-emerald-50 dark:bg-emerald-950/40"
+                    : "hover:bg-zinc-50 dark:hover:bg-zinc-900"
+                }`}
+              >
+                <span
+                  className={`truncate ${
+                    active ? "font-medium text-emerald-700 dark:text-emerald-400" : "text-zinc-600 dark:text-zinc-300"
+                  }`}
+                >
+                  {a.name}
+                </span>
+                <span className="flex-shrink-0 font-medium">{money(a.balance)}</span>
+              </button>
+            );
+          })}
           {accounts.length === 0 && <p className="text-xs text-zinc-400">No accounts yet.</p>}
         </div>
         <details className="mt-1.5 text-xs">
@@ -139,9 +174,23 @@ export function DesktopSidebar({
           Budget This Month
         </h2>
         <div className="mt-1.5 flex flex-col gap-2.5">
-          {expenseCategories.slice(0, 4).map((c) => (
-            <ProgressBar key={c.id} label={c.name} value={c.periodTotal} target={c.monthlyTarget} />
-          ))}
+          {expenseCategories.slice(0, 4).map((c) => {
+            const active = filter?.type === "category" && filter.id === c.id;
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() =>
+                  setFilter(active ? null : { type: "category", id: c.id, label: c.name })
+                }
+                className={`rounded-lg p-1 text-left transition ${
+                  active ? "bg-emerald-50 dark:bg-emerald-950/40" : "hover:bg-zinc-50 dark:hover:bg-zinc-900"
+                }`}
+              >
+                <ProgressBar label={c.name} value={c.periodTotal} target={c.monthlyTarget} />
+              </button>
+            );
+          })}
           {expenseCategories.length === 0 && (
             <p className="text-xs text-zinc-400">No expense categories yet.</p>
           )}

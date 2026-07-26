@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { getAllTransactions } from "@/lib/queries";
+import { prisma } from "@/lib/prisma";
 import { formatDateFull } from "@/lib/format";
 import { DeletableTransactionRow } from "@/components/DeletableTransactionRow";
 import { LoggedToast } from "@/components/LoggedToast";
@@ -6,9 +8,15 @@ import { LoggedToast } from "@/components/LoggedToast";
 export default async function TransactionsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ logged?: string }>;
+  searchParams: Promise<{ logged?: string; accountId?: string; categoryId?: string }>;
 }) {
-  const [transactions, { logged }] = await Promise.all([getAllTransactions(), searchParams]);
+  const { logged, accountId, categoryId } = await searchParams;
+
+  const [transactions, filterAccount, filterCategory] = await Promise.all([
+    getAllTransactions({ accountId, categoryId }),
+    accountId ? prisma.account.findUnique({ where: { id: accountId } }) : null,
+    categoryId ? prisma.category.findUnique({ where: { id: categoryId } }) : null,
+  ]);
 
   const groups = new Map<string, typeof transactions>();
   for (const tx of transactions) {
@@ -17,6 +25,8 @@ export default async function TransactionsPage({
     list.push(tx);
     groups.set(key, list);
   }
+
+  const filterLabel = filterAccount?.name ?? filterCategory?.name ?? null;
 
   return (
     <div className="flex flex-col gap-4 pb-4 lg:mx-auto lg:max-w-lg lg:px-4 lg:pt-6">
@@ -28,9 +38,20 @@ export default async function TransactionsPage({
         </p>
       </header>
 
+      {filterLabel && (
+        <div className="flex items-center justify-between rounded-xl bg-emerald-50 px-3 py-2 text-sm dark:bg-emerald-950/30">
+          <span className="font-medium text-emerald-700 dark:text-emerald-400">
+            Filtered: {filterLabel}
+          </span>
+          <Link href="/transactions" className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+            Clear
+          </Link>
+        </div>
+      )}
+
       {transactions.length === 0 && (
         <div className="rounded-2xl border border-dashed border-zinc-300 p-8 text-center text-sm text-zinc-400 dark:border-zinc-700">
-          No transactions yet. Tap the + button to add your first one.
+          {filterLabel ? "No transactions for this filter." : "No transactions yet. Tap the + button to add your first one."}
         </div>
       )}
 

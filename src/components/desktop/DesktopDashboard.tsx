@@ -6,6 +6,7 @@ import type {
 import { DesktopSidebar } from "@/components/desktop/DesktopSidebar";
 import { QuickAddTransactionForm } from "@/components/desktop/QuickAddTransactionForm";
 import { DesktopTransactionPanel } from "@/components/desktop/DesktopTransactionPanel";
+import { DesktopFilterProvider } from "@/components/desktop/DesktopFilterContext";
 
 export function DesktopDashboard({
   cutoff,
@@ -31,22 +32,24 @@ export function DesktopDashboard({
   transactions: SerializedTransaction[];
 }) {
   return (
-    <div className="flex h-dvh w-full overflow-hidden">
-      <DesktopSidebar
-        cutoff={cutoff}
-        periodLabel={periodLabel}
-        totalBalance={totalBalance}
-        income={income}
-        expense={expense}
-        saved={saved}
-        accounts={accounts}
-        expenseCategories={expenseCategories}
-        savingsCategories={savingsCategories}
-      />
-      <main className="flex min-w-0 flex-1 flex-col bg-zinc-50 dark:bg-zinc-900/40">
-        <QuickAddTransactionForm accounts={accounts} categories={[...expenseCategories, ...savingsCategories]} />
-        <DesktopTransactionPanel transactions={transactions} />
-      </main>
-    </div>
+    <DesktopFilterProvider>
+      <div className="flex h-dvh w-full overflow-hidden">
+        <DesktopSidebar
+          cutoff={cutoff}
+          periodLabel={periodLabel}
+          totalBalance={totalBalance}
+          income={income}
+          expense={expense}
+          saved={saved}
+          accounts={accounts}
+          expenseCategories={expenseCategories}
+          savingsCategories={savingsCategories}
+        />
+        <main className="flex min-w-0 flex-1 flex-col bg-zinc-50 dark:bg-zinc-900/40">
+          <QuickAddTransactionForm accounts={accounts} categories={[...expenseCategories, ...savingsCategories]} />
+          <DesktopTransactionPanel transactions={transactions} />
+        </main>
+      </div>
+    </DesktopFilterProvider>
   );
 }

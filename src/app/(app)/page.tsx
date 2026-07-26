@@ -15,9 +15,15 @@ import { accountTypeLabel, personLabel } from "@/lib/labels";
 import { logout } from "@/lib/actions/session";
 import { TransactionRow } from "@/components/TransactionRow";
 import { ProgressBar } from "@/components/ProgressBar";
+import { MaskableAmount } from "@/components/MaskableAmount";
+import { BalanceVisibilityToggle } from "@/components/BalanceVisibilityToggle";
 import { DesktopDashboard } from "@/components/desktop/DesktopDashboard";
 
 export default async function DashboardPage() {
+  // Budget targets (monthlyTarget) are full-month figures, so KPIs comparing
+  // against them must also cover the full month — comparing only the current
+  // cutoff's spend against a full-month target understated how much budget
+  // was actually left. The cutoff label below is still shown for context.
   const period = monthRange();
   const [accounts, expenseCategories, savingsCategories, summary, personSpend, recent, allTransactions] =
     await Promise.all([
@@ -97,29 +103,40 @@ export default async function DashboardPage() {
       </header>
 
       <div className="rounded-3xl bg-gradient-to-br from-emerald-600 to-emerald-700 p-6 text-white shadow-lg shadow-emerald-600/20">
-        <p className="text-sm font-medium text-emerald-100">Total Balance</p>
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-medium text-emerald-100">Total Balance</p>
+          <BalanceVisibilityToggle />
+        </div>
         <p className="mt-1 text-3xl font-semibold tracking-tight">
-          {formatMoney(totalBalance)}
+          <MaskableAmount value={totalBalance} />
         </p>
         <div className="mt-5 flex gap-4 text-sm">
           <div>
             <p className="text-emerald-100">Income</p>
-            <p className="font-semibold">{formatMoney(summary.income)}</p>
+            <p className="font-semibold"><MaskableAmount value={summary.income} /></p>
           </div>
           <div>
             <p className="text-emerald-100">Expenses</p>
-            <p className="font-semibold">{formatMoney(summary.expense)}</p>
+            <p className="font-semibold"><MaskableAmount value={summary.expense} /></p>
           </div>
           <div>
             <p className="text-emerald-100">Saved</p>
-            <p className="font-semibold">{formatMoney(summary.saved)}</p>
+            <p className="font-semibold"><MaskableAmount value={summary.saved} /></p>
           </div>
         </div>
         {totalExpenseTarget > 0 && (
           <p className="mt-4 text-xs font-medium text-emerald-100">
-            {expenseVariance >= 0
-              ? `${formatMoney(expenseVariance)} left of your ${formatMoney(totalExpenseTarget)} monthly budget`
-              : `${formatMoney(Math.abs(expenseVariance))} over your ${formatMoney(totalExpenseTarget)} monthly budget`}
+            {expenseVariance >= 0 ? (
+              <>
+                <MaskableAmount value={expenseVariance} /> left of your{" "}
+                <MaskableAmount value={totalExpenseTarget} /> monthly budget
+              </>
+            ) : (
+              <>
+                <MaskableAmount value={Math.abs(expenseVariance)} /> over your{" "}
+                <MaskableAmount value={totalExpenseTarget} /> monthly budget
+              </>
+            )}
           </p>
         )}
       </div>
@@ -127,9 +144,10 @@ export default async function DashboardPage() {
       {accounts
         .filter((a) => a.monthlyTarget > 0)
         .map((account) => (
-          <div
+          <Link
             key={account.id}
-            className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+            href={`/transactions?accountId=${account.id}`}
+            className="block rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition active:scale-[0.99] dark:border-zinc-800 dark:bg-zinc-900"
           >
             <ProgressBar
               label={`${account.name} — spending money`}
@@ -137,7 +155,7 @@ export default async function DashboardPage() {
               target={account.monthlyTarget}
               leftValue={account.balance}
             />
-          </div>
+          </Link>
         ))}
 
       <section>
@@ -149,14 +167,17 @@ export default async function DashboardPage() {
         </div>
         <div className="no-scrollbar mt-2 flex gap-3 overflow-x-auto px-1 pb-1">
           {accounts.map((account) => (
-            <div
+            <Link
               key={account.id}
-              className="min-w-[9.5rem] flex-shrink-0 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+              href={`/transactions?accountId=${account.id}`}
+              className="min-w-[9.5rem] flex-shrink-0 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition active:scale-[0.98] dark:border-zinc-800 dark:bg-zinc-900"
             >
               <p className="text-xs font-medium text-zinc-400">{accountTypeLabel[account.type]}</p>
               <p className="mt-1 truncate text-sm font-semibold">{account.name}</p>
-              <p className="mt-2 text-base font-semibold">{formatMoney(account.balance)}</p>
-            </div>
+              <p className="mt-2 text-base font-semibold">
+                <MaskableAmount value={account.balance} />
+              </p>
+            </Link>
           ))}
         </div>
       </section>
@@ -194,12 +215,13 @@ export default async function DashboardPage() {
         </div>
         <div className="mt-2 flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           {expenseCategories.slice(0, 5).map((category) => (
-            <ProgressBar
-              key={category.id}
-              label={category.name}
-              value={category.periodTotal}
-              target={category.monthlyTarget}
-            />
+            <Link key={category.id} href={`/transactions?categoryId=${category.id}`} className="block">
+              <ProgressBar
+                label={category.name}
+                value={category.periodTotal}
+                target={category.monthlyTarget}
+              />
+            </Link>
           ))}
           {expenseCategories.length === 0 && (
             <p className="text-sm text-zinc-400">No expense categories yet.</p>
@@ -213,14 +235,15 @@ export default async function DashboardPage() {
         </h2>
         <div className="mt-2 flex flex-col gap-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           {savingsCategories.slice(0, 4).map((category) => (
-            <ProgressBar
-              key={category.id}
-              label={category.name}
-              value={category.allTimeTotal}
-              target={category.goalTarget}
-              tone="emerald"
-              showVariance={false}
-            />
+            <Link key={category.id} href={`/transactions?categoryId=${category.id}`} className="block">
+              <ProgressBar
+                label={category.name}
+                value={category.allTimeTotal}
+                target={category.goalTarget}
+                tone="emerald"
+                showVariance={false}
+              />
+            </Link>
           ))}
           {savingsCategories.length === 0 && (
             <p className="text-sm text-zinc-400">No savings funds yet.</p>

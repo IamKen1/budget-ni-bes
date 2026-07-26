@@ -75,6 +75,57 @@ export async function quickAddTransaction(formData: FormData) {
   }
 }
 
+export async function updateTransactionFields(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  if (!id) return { error: "Missing transaction id." };
+
+  const parsed = transactionSchema.safeParse({
+    date: formData.get("date"),
+    entryType: formData.get("entryType"),
+    amount: formData.get("amount"),
+    person: formData.get("person"),
+    particulars: formData.get("particulars") || undefined,
+    accountId: formData.get("accountId"),
+    categoryId: formData.get("categoryId") || undefined,
+    toAccountId: formData.get("toAccountId") || undefined,
+  });
+  if (!parsed.success) return { error: "Please fill in a valid amount and account." };
+  const data = parsed.data;
+
+  const before = await prisma.transaction.findUnique({ where: { id } });
+  if (!before) return { error: "Transaction not found." };
+
+  const tx = await prisma.transaction.update({
+    where: { id },
+    data: {
+      date: new Date(data.date),
+      entryType: data.entryType,
+      amount: data.amount,
+      person: data.person,
+      particulars: data.particulars || null,
+      accountId: data.accountId,
+      categoryId: data.entryType === "TRANSFER" ? null : data.categoryId || null,
+      toAccountId: data.entryType === "TRANSFER" ? data.toAccountId || null : null,
+    },
+  });
+
+  const activity = await recordActivity({
+    entity: "TRANSACTION",
+    action: "UPDATE",
+    entityId: id,
+    summary: `Updated ${formatMoney(Number(tx.amount))} ${tx.entryType.toLowerCase().replace("_", " ")}`,
+    before: transactionSnapshot(before),
+    after: transactionSnapshot(tx),
+  });
+
+  revalidatePath("/");
+  revalidatePath("/transactions");
+  revalidatePath("/accounts");
+  revalidatePath("/categories");
+
+  return { success: true as const, activityId: activity.id };
+}
+
 export async function deleteTransaction(id: string) {
   const tx = await prisma.transaction.findUnique({ where: { id } });
   if (!tx) return { error: "Transaction not found." };

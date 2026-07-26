@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // One-off debug/check scripts run directly with node, outside the app bundle.
+    "scratch_*.cjs",
+    "scratch_*.ts",
   ]),
 ]);
 

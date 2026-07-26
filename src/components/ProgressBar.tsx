@@ -1,4 +1,7 @@
+"use client";
+
 import { formatMoney } from "@/lib/format";
+import { useBalanceVisibility } from "@/components/BalanceVisibilityContext";
 
 export function ProgressBar({
   label,
@@ -18,6 +21,7 @@ export function ProgressBar({
    * bar, where value/target track deposits, not spend-vs-limit. */
   leftValue?: number;
 }) {
+  const { visible } = useBalanceVisibility();
   const pct = target > 0 ? Math.min(100, Math.round((value / target) * 100)) : value > 0 ? 100 : 0;
   const variance = leftValue ?? target - value;
   const overBudget = tone === "zinc" && (leftValue !== undefined ? variance < 0 : target > 0 && value > target);
@@ -28,19 +32,21 @@ export function ProgressBar({
     ? "bg-emerald-600"
     : "bg-zinc-900 dark:bg-zinc-100";
 
+  const money = (n: number) => (visible ? formatMoney(n) : "₱ • • •");
+
   return (
     <div>
       <div className="flex items-baseline justify-between text-sm">
         <span className="font-medium">{label}</span>
         <span className="text-xs text-zinc-400">
-          {formatMoney(value)}
-          {target > 0 ? ` / ${formatMoney(target)}` : ""}
+          {money(value)}
+          {target > 0 ? ` / ${money(target)}` : ""}
         </span>
       </div>
       <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
         <div
           className={`h-full rounded-full transition-all ${barColor}`}
-          style={{ width: `${pct}%` }}
+          style={{ width: `${visible ? pct : 0}%` }}
         />
       </div>
       {showVariance && target > 0 && (
@@ -54,10 +60,10 @@ export function ProgressBar({
           }`}
         >
           {overBudget
-            ? `${formatMoney(Math.abs(variance))} over`
+            ? `${money(Math.abs(variance))} over`
             : tone === "emerald"
-            ? `${formatMoney(variance)} to go`
-            : `${formatMoney(variance)} left`}
+            ? `${money(variance)} to go`
+            : `${money(variance)} left`}
         </p>
       )}
     </div>

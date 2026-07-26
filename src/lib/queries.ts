@@ -223,12 +223,18 @@ export async function getRecentTransactions(limit = 15): Promise<SerializedTrans
   return transactions.map(serializeTransaction);
 }
 
-export async function getAllTransactions(): Promise<SerializedTransaction[]> {
+export async function getAllTransactions(filter?: {
+  accountId?: string;
+  categoryId?: string;
+}): Promise<SerializedTransaction[]> {
   const transactions = await prisma.transaction.findMany({
     orderBy: [{ date: "asc" }, { createdAt: "asc" }],
     include: { account: true, category: true, toAccount: true },
   });
 
+  // Running balance is computed over the full, unfiltered history so it still
+  // reflects the real total-across-all-accounts figure even when the list
+  // below is filtered down to one account/category.
   let running = 0;
   const withBalance = transactions.map((tx) => {
     const amount = toNumber(tx.amount);
@@ -237,7 +243,15 @@ export async function getAllTransactions(): Promise<SerializedTransaction[]> {
     return { ...serializeTransaction(tx), runningBalance: running };
   });
 
-  return withBalance.reverse();
+  const filtered = withBalance.filter((tx) => {
+    if (filter?.accountId && tx.accountId !== filter.accountId && tx.toAccountId !== filter.accountId) {
+      return false;
+    }
+    if (filter?.categoryId && tx.categoryId !== filter.categoryId) return false;
+    return true;
+  });
+
+  return filtered.reverse();
 }
 
 export async function getAllAccounts(): Promise<SerializedAccount[]> {
