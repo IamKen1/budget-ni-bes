@@ -3,16 +3,19 @@
 import { useRef, useState } from "react";
 import type { CategoryKind } from "@/generated/prisma/client";
 import { createCategory } from "@/lib/actions/categories";
+import { useUndoToast } from "@/components/ToastContext";
 
 export function AddCategoryForm() {
   const formRef = useRef<HTMLFormElement>(null);
   const [kind, setKind] = useState<CategoryKind>("EXPENSE");
+  const { showUndo } = useUndoToast();
 
   return (
     <form
       ref={formRef}
       action={async (formData) => {
-        await createCategory(formData);
+        const result = await createCategory(formData);
+        if (result?.activityId) showUndo(result.activityId, "Category added");
         formRef.current?.reset();
         setKind("EXPENSE");
       }}

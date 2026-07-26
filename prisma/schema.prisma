@@ -35,6 +35,18 @@ enum Person {
   SHARED
 }
 
+enum ActivityEntity {
+  TRANSACTION
+  ACCOUNT
+  CATEGORY
+}
+
+enum ActivityAction {
+  CREATE
+  UPDATE
+  DELETE
+}
+
 model Account {
   id        String      @id @default(cuid())
   name      String      @unique
@@ -62,6 +74,17 @@ model Category {
   createdAt     DateTime     @default(now())
 
   transactions Transaction[]
+  categoryHints CategoryHint[]
+}
+
+/// A keyword → category mapping Bes AI learns after asking the user once
+/// (e.g. "reunion" → "Bes Date"), so it doesn't have to ask again next time.
+model CategoryHint {
+  id         String   @id @default(cuid())
+  keyword    String   @unique
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id])
+  createdAt  DateTime @default(now())
 }
 
 model Transaction {
@@ -87,4 +110,21 @@ model Transaction {
   @@index([date])
   @@index([categoryId])
   @@index([accountId])
+}
+
+/// Records every create/update/delete so it can be shown and undone from Settings.
+model ActivityLog {
+  id       String         @id @default(cuid())
+  entity   ActivityEntity
+  action   ActivityAction
+  entityId String
+  summary  String
+  /// Field snapshot before the change (for UPDATE/DELETE), used to restore on undo.
+  before   Json?
+  /// Field snapshot after the change (for CREATE/UPDATE), shown for context.
+  after    Json?
+  undoneAt DateTime?
+  createdAt DateTime      @default(now())
+
+  @@index([createdAt])
 }

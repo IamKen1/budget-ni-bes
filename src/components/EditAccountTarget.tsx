@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { updateAccountTarget } from "@/lib/actions/accounts";
+import { useUndoToast } from "@/components/ToastContext";
 
 export function EditAccountTarget({
   accountId,
@@ -11,6 +12,7 @@ export function EditAccountTarget({
   monthlyTarget: number;
 }) {
   const [open, setOpen] = useState(false);
+  const { showUndo } = useUndoToast();
 
   if (!open) {
     return (
@@ -27,7 +29,8 @@ export function EditAccountTarget({
   return (
     <form
       action={async (formData) => {
-        await updateAccountTarget(formData);
+        const result = await updateAccountTarget(formData);
+        if (result?.activityId) showUndo(result.activityId, "Target updated");
         setOpen(false);
       }}
       className="flex items-center gap-2"

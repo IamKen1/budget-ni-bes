@@ -19,7 +19,7 @@ export default async function CategoriesPage() {
   const totalGoal = savingsCategories.reduce((sum, c) => sum + c.goalTarget, 0);
 
   return (
-    <div className="flex flex-col gap-5 pb-4">
+    <div className="flex flex-col gap-5 pb-4 lg:mx-auto lg:max-w-lg lg:px-4 lg:pt-6">
       <header className="pt-2">
         <h1 className="text-xl font-semibold tracking-tight">Categories</h1>
         <p className="text-sm text-zinc-500 dark:text-zinc-400">
@@ -47,8 +47,9 @@ export default async function CategoriesPage() {
                   showGoal={false}
                 />
                 <ArchiveToggleButton
+                  id={category.id}
                   archived={category.archived}
-                  onToggle={toggleArchiveCategory.bind(null, category.id, !category.archived)}
+                  toggleAction={toggleArchiveCategory}
                 />
               </div>
             </div>
@@ -97,8 +98,9 @@ export default async function CategoriesPage() {
                   showGoal={true}
                 />
                 <ArchiveToggleButton
+                  id={category.id}
                   archived={category.archived}
-                  onToggle={toggleArchiveCategory.bind(null, category.id, !category.archived)}
+                  toggleAction={toggleArchiveCategory}
                 />
               </div>
             </div>

@@ -8,7 +8,7 @@ export default async function NewTransactionPage() {
   ]);
 
   return (
-    <div className="flex flex-col gap-5 pb-4">
+    <div className="flex flex-col gap-5 pb-4 lg:mx-auto lg:max-w-lg lg:px-4 lg:pt-6">
       <NewTransactionForm
         accounts={accounts.filter((a) => !a.archived)}
         categories={categories.filter((c) => !c.archived)}

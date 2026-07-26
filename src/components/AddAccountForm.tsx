@@ -2,15 +2,18 @@
 
 import { useRef } from "react";
 import { createAccount } from "@/lib/actions/accounts";
+import { useUndoToast } from "@/components/ToastContext";
 
 export function AddAccountForm() {
   const formRef = useRef<HTMLFormElement>(null);
+  const { showUndo } = useUndoToast();
 
   return (
     <form
       ref={formRef}
       action={async (formData) => {
-        await createAccount(formData);
+        const result = await createAccount(formData);
+        if (result?.activityId) showUndo(result.activityId, "Account added");
         formRef.current?.reset();
       }}
       className="flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"

@@ -1,9 +1,14 @@
 import { getAllTransactions } from "@/lib/queries";
 import { formatDateFull } from "@/lib/format";
 import { DeletableTransactionRow } from "@/components/DeletableTransactionRow";
+import { LoggedToast } from "@/components/LoggedToast";
 
-export default async function TransactionsPage() {
-  const transactions = await getAllTransactions();
+export default async function TransactionsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ logged?: string }>;
+}) {
+  const [transactions, { logged }] = await Promise.all([getAllTransactions(), searchParams]);
 
   const groups = new Map<string, typeof transactions>();
   for (const tx of transactions) {
@@ -14,7 +19,8 @@ export default async function TransactionsPage() {
   }
 
   return (
-    <div className="flex flex-col gap-4 pb-4">
+    <div className="flex flex-col gap-4 pb-4 lg:mx-auto lg:max-w-lg lg:px-4 lg:pt-6">
+      {logged && <LoggedToast activityId={logged} />}
       <header className="pt-2">
         <h1 className="text-xl font-semibold tracking-tight">Transactions</h1>
         <p className="text-sm text-zinc-500 dark:text-zinc-400">

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { updateCategoryTargets } from "@/lib/actions/categories";
+import { useUndoToast } from "@/components/ToastContext";
 
 export function EditCategoryTargets({
   categoryId,
@@ -15,6 +16,7 @@ export function EditCategoryTargets({
   showGoal: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const { showUndo } = useUndoToast();
 
   if (!open) {
     return (
@@ -31,7 +33,8 @@ export function EditCategoryTargets({
   return (
     <form
       action={async (formData) => {
-        await updateCategoryTargets(formData);
+        const result = await updateCategoryTargets(formData);
+        if (result?.activityId) showUndo(result.activityId, "Targets updated");
         setOpen(false);
       }}
       className="flex items-center gap-2"

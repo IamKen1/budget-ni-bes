@@ -15,7 +15,7 @@ export default async function AccountsPage() {
   const balanceById = new Map(withBalances.map((a) => [a.id, a.balance]));
 
   return (
-    <div className="flex flex-col gap-5 pb-4">
+    <div className="flex flex-col gap-5 pb-4 lg:mx-auto lg:max-w-lg lg:px-4 lg:pt-6">
       <header className="pt-2">
         <h1 className="text-xl font-semibold tracking-tight">Accounts</h1>
         <p className="text-sm text-zinc-500 dark:text-zinc-400">
@@ -52,8 +52,9 @@ export default async function AccountsPage() {
               <div className="mt-2 flex items-center justify-between">
                 <EditAccountTarget accountId={account.id} monthlyTarget={account.monthlyTarget} />
                 <ArchiveToggleButton
+                  id={account.id}
                   archived={account.archived}
-                  onToggle={toggleArchiveAccount.bind(null, account.id, !account.archived)}
+                  toggleAction={toggleArchiveAccount}
                 />
               </div>
             </div>

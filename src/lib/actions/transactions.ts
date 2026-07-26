@@ -4,6 +4,9 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { formatMoney } from "@/lib/format";
+import { recordActivity } from "@/lib/actions/activity";
+import { transactionSnapshot } from "@/lib/activity-snapshots";
 
 const transactionSchema = z.object({
   date: z.string().min(1),
@@ -16,7 +19,7 @@ const transactionSchema = z.object({
   toAccountId: z.string().optional(),
 });
 
-export async function createTransaction(formData: FormData) {
+async function insertTransaction(formData: FormData) {
   const parsed = transactionSchema.parse({
     date: formData.get("date"),
     entryType: formData.get("entryType"),
@@ -28,7 +31,7 @@ export async function createTransaction(formData: FormData) {
     toAccountId: formData.get("toAccountId") || undefined,
   });
 
-  await prisma.transaction.create({
+  const tx = await prisma.transaction.create({
     data: {
       date: new Date(parsed.date),
       entryType: parsed.entryType,
@@ -41,13 +44,51 @@ export async function createTransaction(formData: FormData) {
     },
   });
 
+  const activity = await recordActivity({
+    entity: "TRANSACTION",
+    action: "CREATE",
+    entityId: tx.id,
+    summary: `Logged ${formatMoney(parsed.amount)} ${parsed.entryType.toLowerCase().replace("_", " ")}`,
+    after: transactionSnapshot(tx),
+  });
+
   revalidatePath("/");
   revalidatePath("/transactions");
-  redirect("/transactions");
+
+  return activity.id;
+}
+
+export async function createTransaction(formData: FormData) {
+  const activityId = await insertTransaction(formData);
+  redirect(`/transactions?logged=${activityId}`);
+}
+
+/** Same as createTransaction but for the always-visible desktop quick-add form — stays on the page instead of redirecting. */
+export async function quickAddTransaction(formData: FormData) {
+  try {
+    const activityId = await insertTransaction(formData);
+    return { activityId };
+  } catch {
+    return { error: "Could not save that transaction. Check the amount and try again." };
+  }
 }
 
 export async function deleteTransaction(id: string) {
+  const tx = await prisma.transaction.findUnique({ where: { id } });
+  if (!tx) return { error: "Transaction not found." };
+
   await prisma.transaction.delete({ where: { id } });
+
+  const activity = await recordActivity({
+    entity: "TRANSACTION",
+    action: "DELETE",
+    entityId: id,
+    summary: `Deleted ${formatMoney(Number(tx.amount))} ${tx.entryType.toLowerCase().replace("_", " ")}`,
+    before: transactionSnapshot(tx),
+  });
+
   revalidatePath("/");
   revalidatePath("/transactions");
+
+  return { activityId: activity.id };
 }

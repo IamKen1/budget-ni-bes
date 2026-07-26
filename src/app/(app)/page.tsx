@@ -6,6 +6,7 @@ import {
   getPeriodSummary,
   getPersonSpendBreakdown,
   getRecentTransactions,
+  getAllTransactions,
   monthRange,
   currentCutoffLabel,
 } from "@/lib/queries";
@@ -14,10 +15,11 @@ import { accountTypeLabel, personLabel } from "@/lib/labels";
 import { logout } from "@/lib/actions/session";
 import { TransactionRow } from "@/components/TransactionRow";
 import { ProgressBar } from "@/components/ProgressBar";
+import { DesktopDashboard } from "@/components/desktop/DesktopDashboard";
 
 export default async function DashboardPage() {
   const period = monthRange();
-  const [accounts, expenseCategories, savingsCategories, summary, personSpend, recent] =
+  const [accounts, expenseCategories, savingsCategories, summary, personSpend, recent, allTransactions] =
     await Promise.all([
       getAccountsWithBalances(),
       getExpenseCategoriesWithProgress(period),
@@ -25,6 +27,7 @@ export default async function DashboardPage() {
       getPeriodSummary(period),
       getPersonSpendBreakdown(period),
       getRecentTransactions(8),
+      getAllTransactions(),
     ]);
 
   const totalBalance = accounts.reduce((sum, a) => sum + a.balance, 0);
@@ -34,7 +37,22 @@ export default async function DashboardPage() {
   const totalPersonSpend = personSpend.JENNA + personSpend.KENNETH + personSpend.SHARED;
 
   return (
-    <div className="flex flex-col gap-6 pb-4">
+    <>
+    <div className="hidden lg:block">
+      <DesktopDashboard
+        cutoff={cutoff}
+        periodLabel={period.label}
+        totalBalance={totalBalance}
+        income={summary.income}
+        expense={summary.expense}
+        saved={summary.saved}
+        accounts={accounts}
+        expenseCategories={expenseCategories}
+        savingsCategories={savingsCategories}
+        transactions={allTransactions}
+      />
+    </div>
+    <div className="flex flex-col gap-6 pb-4 lg:hidden">
       <header className="flex items-center justify-between pt-2">
         <div>
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
@@ -42,23 +60,40 @@ export default async function DashboardPage() {
           </p>
           <h1 className="text-xl font-semibold tracking-tight">{period.label} Budget</h1>
         </div>
-        <form action={logout}>
-          <button
-            type="submit"
-            aria-label="Log out"
+        <div className="flex items-center gap-2">
+          <Link
+            href="/settings"
+            aria-label="Settings"
             className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 transition active:scale-95 dark:bg-zinc-900 dark:text-zinc-400"
           >
             <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
+              <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth={1.8} />
               <path
-                d="M9 21H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3M16 17l5-5-5-5M21 12H9"
+                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.32 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"
                 stroke="currentColor"
-                strokeWidth={1.8}
-                strokeLinecap="round"
+                strokeWidth={1.5}
                 strokeLinejoin="round"
               />
             </svg>
-          </button>
-        </form>
+          </Link>
+          <form action={logout}>
+            <button
+              type="submit"
+              aria-label="Log out"
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 transition active:scale-95 dark:bg-zinc-900 dark:text-zinc-400"
+            >
+              <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
+                <path
+                  d="M9 21H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3M16 17l5-5-5-5M21 12H9"
+                  stroke="currentColor"
+                  strokeWidth={1.8}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+          </form>
+        </div>
       </header>
 
       <div className="rounded-3xl bg-gradient-to-br from-emerald-600 to-emerald-700 p-6 text-white shadow-lg shadow-emerald-600/20">
@@ -209,5 +244,6 @@ export default async function DashboardPage() {
         </div>
       </section>
     </div>
+    </>
   );
 }

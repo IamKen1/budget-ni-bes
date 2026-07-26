@@ -44,10 +44,17 @@ export function TransactionRow({ transaction }: { transaction: SerializedTransac
           {subtitle ? ` · ${subtitle}` : ""}
         </p>
       </div>
-      <p className={`flex-shrink-0 text-sm font-semibold ${entryTone[transaction.entryType]}`}>
-        {entrySign[transaction.entryType]}
-        {formatMoney(transaction.amount)}
-      </p>
+      <div className="flex-shrink-0 text-right">
+        <p className={`text-sm font-semibold ${entryTone[transaction.entryType]}`}>
+          {entrySign[transaction.entryType]}
+          {formatMoney(transaction.amount)}
+        </p>
+        {transaction.runningBalance !== undefined && (
+          <p className="text-[11px] text-zinc-400">
+            Bal: {formatMoney(transaction.runningBalance)}
+          </p>
+        )}
+      </div>
     </div>
   );
 }

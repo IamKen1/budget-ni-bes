@@ -4,6 +4,7 @@ import { useTransition } from "react";
 import type { SerializedTransaction } from "@/lib/queries";
 import { TransactionRow } from "@/components/TransactionRow";
 import { deleteTransaction } from "@/lib/actions/transactions";
+import { useUndoToast } from "@/components/ToastContext";
 
 export function DeletableTransactionRow({
   transaction,
@@ -11,6 +12,7 @@ export function DeletableTransactionRow({
   transaction: SerializedTransaction;
 }) {
   const [isPending, startTransition] = useTransition();
+  const { showUndo } = useUndoToast();
 
   return (
     <div className={`flex items-center gap-1 ${isPending ? "opacity-40" : ""}`}>
@@ -23,8 +25,9 @@ export function DeletableTransactionRow({
         disabled={isPending}
         onClick={() => {
           if (confirm("Delete this transaction?")) {
-            startTransition(() => {
-              deleteTransaction(transaction.id);
+            startTransition(async () => {
+              const result = await deleteTransaction(transaction.id);
+              if (result?.activityId) showUndo(result.activityId, "Transaction deleted");
             });
           }
         }}

@@ -3,6 +3,8 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { recordActivity } from "@/lib/actions/activity";
+import { categorySnapshot } from "@/lib/activity-snapshots";
 
 const categorySchema = z.object({
   name: z.string().min(1),
@@ -20,7 +22,7 @@ export async function createCategory(formData: FormData) {
   });
 
   const count = await prisma.category.count({ where: { kind: parsed.kind } });
-  await prisma.category.create({
+  const category = await prisma.category.create({
     data: {
       name: parsed.name,
       kind: parsed.kind,
@@ -30,14 +32,41 @@ export async function createCategory(formData: FormData) {
     },
   });
 
+  const activity = await recordActivity({
+    entity: "CATEGORY",
+    action: "CREATE",
+    entityId: category.id,
+    summary: `Added category "${category.name}"`,
+    after: categorySnapshot(category),
+  });
+
   revalidatePath("/categories");
   revalidatePath("/");
+
+  return { activityId: activity.id };
 }
 
 export async function toggleArchiveCategory(id: string, archived: boolean) {
-  await prisma.category.update({ where: { id }, data: { archived } });
+  const before = await prisma.category.findUnique({ where: { id } });
+  if (!before) return { error: "Category not found." };
+
+  const category = await prisma.category.update({ where: { id }, data: { archived } });
+
+  const activity = await recordActivity({
+    entity: "CATEGORY",
+    action: "UPDATE",
+    entityId: id,
+    summary: archived
+      ? `Archived category "${category.name}"`
+      : `Restored category "${category.name}"`,
+    before: categorySnapshot(before),
+    after: categorySnapshot(category),
+  });
+
   revalidatePath("/categories");
   revalidatePath("/");
+
+  return { activityId: activity.id };
 }
 
 const targetsSchema = z.object({
@@ -53,11 +82,25 @@ export async function updateCategoryTargets(formData: FormData) {
     goalTarget: formData.get("goalTarget"),
   });
 
-  await prisma.category.update({
+  const before = await prisma.category.findUnique({ where: { id: parsed.id } });
+  if (!before) return { error: "Category not found." };
+
+  const category = await prisma.category.update({
     where: { id: parsed.id },
     data: { monthlyTarget: parsed.monthlyTarget, goalTarget: parsed.goalTarget },
   });
 
+  const activity = await recordActivity({
+    entity: "CATEGORY",
+    action: "UPDATE",
+    entityId: parsed.id,
+    summary: `Updated "${category.name}" targets`,
+    before: categorySnapshot(before),
+    after: categorySnapshot(category),
+  });
+
   revalidatePath("/categories");
   revalidatePath("/");
+
+  return { activityId: activity.id };
 }

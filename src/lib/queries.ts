@@ -185,6 +185,8 @@ export type SerializedTransaction = Omit<Transaction, "amount"> & {
   account: SerializedAccount;
   category: SerializedCategory | null;
   toAccount: SerializedAccount | null;
+  /// Running total balance across all accounts right after this transaction. Only populated by getAllTransactions.
+  runningBalance?: number;
 };
 
 export type SerializedCategory = Omit<Category, "monthlyTarget" | "goalTarget"> & {
@@ -223,10 +225,19 @@ export async function getRecentTransactions(limit = 15): Promise<SerializedTrans
 
 export async function getAllTransactions(): Promise<SerializedTransaction[]> {
   const transactions = await prisma.transaction.findMany({
-    orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+    orderBy: [{ date: "asc" }, { createdAt: "asc" }],
     include: { account: true, category: true, toAccount: true },
   });
-  return transactions.map(serializeTransaction);
+
+  let running = 0;
+  const withBalance = transactions.map((tx) => {
+    const amount = toNumber(tx.amount);
+    if (tx.entryType === "INCOME" || tx.entryType === "SAVINGS_DEPOSIT") running += amount;
+    else if (tx.entryType === "EXPENSE" || tx.entryType === "SAVINGS_WITHDRAW") running -= amount;
+    return { ...serializeTransaction(tx), runningBalance: running };
+  });
+
+  return withBalance.reverse();
 }
 
 export async function getAllAccounts(): Promise<SerializedAccount[]> {
