@@ -4,6 +4,7 @@ import type { SerializedTransaction } from "@/lib/queries";
 import { formatDate, formatMoney } from "@/lib/format";
 import { entryTypeLabel } from "@/lib/labels";
 import { useTransactionDetail } from "@/components/TransactionDetailContext";
+import { useBalanceVisibility } from "@/components/BalanceVisibilityContext";
 
 const entryTone: Record<string, string> = {
   INCOME: "text-emerald-600 dark:text-emerald-400",
@@ -23,6 +24,7 @@ const entrySign: Record<string, string> = {
 
 export function TransactionRow({ transaction }: { transaction: SerializedTransaction }) {
   const { open } = useTransactionDetail();
+  const { visible } = useBalanceVisibility();
 
   const title =
     transaction.particulars ||
@@ -60,7 +62,7 @@ export function TransactionRow({ transaction }: { transaction: SerializedTransac
         </p>
         {transaction.runningBalance !== undefined && (
           <p className="text-[11px] text-zinc-400">
-            Bal: {formatMoney(transaction.runningBalance)}
+            Bal: {visible ? formatMoney(transaction.runningBalance) : "₱ • • •"}
           </p>
         )}
       </div>

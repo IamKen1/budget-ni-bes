@@ -4,6 +4,7 @@ import { formatMoney } from "@/lib/format";
 import {
   getAccountsWithBalances,
   getExpenseCategoriesWithProgress,
+  getSavingsCategoriesWithProgress,
   monthRange,
 } from "@/lib/queries";
 import { recordActivity } from "@/lib/actions/activity";
@@ -79,6 +80,15 @@ export const toolDefinitions = [
       name: "get_budget_progress",
       description:
         "Get this month's expense categories with their monthly target, how much has been spent so far, and how much is left.",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_savings_progress",
+      description:
+        "Get every savings fund (Emergency Fund, Car Fund, Baby Fund, etc.) with its long-term goal target, total deposited, total withdrawn, and current net balance. Use this — not get_balances — for any question about a specific fund's amount, e.g. 'magkano na yung emergency fund', 'how much is in Baby Fund'. Fund balances are NOT the same as account balances.",
       parameters: { type: "object", properties: {}, required: [] },
     },
   },
@@ -256,6 +266,18 @@ async function toolGetBudgetProgress() {
       remaining: c.monthlyTarget - c.periodTotal,
       overBudget: c.monthlyTarget > 0 && c.periodTotal > c.monthlyTarget,
     }));
+}
+
+async function toolGetSavingsProgress() {
+  const funds = await getSavingsCategoriesWithProgress();
+  return funds.map((f) => ({
+    fund: f.name,
+    goalTarget: f.goalTarget,
+    depositedThisMonth: f.periodTotal,
+    currentBalance: f.allTimeTotal,
+    remainingToGoal: f.goalTarget > 0 ? f.goalTarget - f.allTimeTotal : null,
+    percentOfGoal: f.goalTarget > 0 ? Math.round((f.allTimeTotal / f.goalTarget) * 100) : null,
+  }));
 }
 
 async function toolLogTransaction(args: {
@@ -507,6 +529,8 @@ export async function executeTool(name: string, args: Record<string, unknown>) {
       return toolGetSpending(args as { period: Period; person?: string });
     case "get_budget_progress":
       return toolGetBudgetProgress();
+    case "get_savings_progress":
+      return toolGetSavingsProgress();
     case "log_transaction":
       return toolLogTransaction(
         args as Parameters<typeof toolLogTransaction>[0]

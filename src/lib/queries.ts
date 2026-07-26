@@ -232,15 +232,23 @@ export async function getAllTransactions(filter?: {
     include: { account: true, category: true, toAccount: true },
   });
 
-  // Running balance is computed over the full, unfiltered history so it still
-  // reflects the real total-across-all-accounts figure even when the list
-  // below is filtered down to one account/category.
-  let running = 0;
+  // Running balance is per-account (like a real bank statement line), computed
+  // over the full, unfiltered history in date order, then read back out for
+  // each transaction's own account — not one blended total across accounts.
+  const balances = new Map<string, number>();
+  const balanceOf = (id: string) => balances.get(id) ?? 0;
+
   const withBalance = transactions.map((tx) => {
     const amount = toNumber(tx.amount);
-    if (tx.entryType === "INCOME" || tx.entryType === "SAVINGS_DEPOSIT") running += amount;
-    else if (tx.entryType === "EXPENSE" || tx.entryType === "SAVINGS_WITHDRAW") running -= amount;
-    return { ...serializeTransaction(tx), runningBalance: running };
+    if (tx.entryType === "TRANSFER") {
+      balances.set(tx.accountId, balanceOf(tx.accountId) - amount);
+      if (tx.toAccountId) balances.set(tx.toAccountId, balanceOf(tx.toAccountId) + amount);
+    } else if (tx.entryType === "INCOME" || tx.entryType === "SAVINGS_DEPOSIT") {
+      balances.set(tx.accountId, balanceOf(tx.accountId) + amount);
+    } else if (tx.entryType === "EXPENSE" || tx.entryType === "SAVINGS_WITHDRAW") {
+      balances.set(tx.accountId, balanceOf(tx.accountId) - amount);
+    }
+    return { ...serializeTransaction(tx), runningBalance: balanceOf(tx.accountId) };
   });
 
   const filtered = withBalance.filter((tx) => {
