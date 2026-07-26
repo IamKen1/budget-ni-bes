@@ -1,5 +1,6 @@
 import { BottomNav } from "@/components/BottomNav";
 import { ChatWidget } from "@/components/ChatWidget";
+import { DesktopChatButton } from "@/components/DesktopChatButton";
 import { ChatProvider } from "@/components/ChatContext";
 import { ToastProvider } from "@/components/ToastContext";
 
@@ -12,6 +13,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             {children}
           </main>
           <ChatWidget />
+          <DesktopChatButton />
           <div className="lg:hidden">
             <BottomNav />
           </div>

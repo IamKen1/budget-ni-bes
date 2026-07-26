@@ -30,9 +30,12 @@ export function ChatWidget() {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/30" onClick={() => setOpen(false)}>
+    <div
+      className="fixed inset-0 z-50 flex flex-col justify-end bg-black/30 lg:inset-auto lg:bottom-6 lg:right-6 lg:justify-start lg:bg-transparent"
+      onClick={() => setOpen(false)}
+    >
       <div
-        className="flex h-[85dvh] flex-col rounded-t-3xl bg-white dark:bg-zinc-950"
+        className="flex h-[85dvh] flex-col rounded-t-3xl bg-white shadow-xl dark:bg-zinc-950 lg:h-128 lg:w-96 lg:rounded-3xl lg:border lg:border-zinc-200 lg:dark:border-zinc-800"
         onClick={(e) => e.stopPropagation()}
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
