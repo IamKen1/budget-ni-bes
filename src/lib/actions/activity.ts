@@ -4,6 +4,7 @@ import dayjs from "dayjs";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import type { Prisma } from "@/generated/prisma/client";
+import { isValidPasscode } from "@/lib/auth";
 import {
   transactionSnapshot,
   accountSnapshot,
@@ -135,6 +136,38 @@ export async function undoActivity(id: string): Promise<{ success?: true; error?
   }
 
   await prisma.activityLog.update({ where: { id }, data: { undoneAt: new Date() } });
+
+  revalidatePath("/");
+  revalidatePath("/transactions");
+  revalidatePath("/accounts");
+  revalidatePath("/categories");
+  revalidatePath("/settings");
+
+  return { success: true };
+}
+
+/**
+ * Irreversible: wipes every transaction (accounts, categories, and their
+ * targets are kept, so balances just reset to zero) plus the transaction
+ * activity log, since those entries would otherwise point at rows that no
+ * longer exist. Gated on the app passcode + a literal "DELETE" confirmation
+ * on the client — this bypasses the normal undo system entirely.
+ */
+export async function clearAllTransactions(
+  passcode: string,
+  confirmation: string
+): Promise<{ success?: true; error?: string }> {
+  if (confirmation !== "DELETE") {
+    return { error: 'Type "DELETE" exactly to confirm.' };
+  }
+  if (!(await isValidPasscode(passcode))) {
+    return { error: "Wrong passcode." };
+  }
+
+  await prisma.$transaction([
+    prisma.transaction.deleteMany({}),
+    prisma.activityLog.deleteMany({ where: { entity: "TRANSACTION" } }),
+  ]);
 
   revalidatePath("/");
   revalidatePath("/transactions");

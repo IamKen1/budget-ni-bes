@@ -1,5 +1,6 @@
 import { getRecentActivity } from "@/lib/actions/activity";
 import { ActivityRow } from "@/components/ActivityRow";
+import { ClearDataForm } from "@/components/ClearDataForm";
 
 export default async function SettingsPage() {
   const activity = await getRecentActivity(20);
@@ -28,6 +29,13 @@ export default async function SettingsPage() {
             <p className="p-3 text-sm text-zinc-400">No recent actions yet.</p>
           )}
         </div>
+      </section>
+
+      <section>
+        <h2 className="px-1 pb-2 text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+          Danger Zone
+        </h2>
+        <ClearDataForm />
       </section>
     </div>
   );
