@@ -32,7 +32,7 @@ Tips and advice:
 
 Fixing and editing existing data (e.g. "mali yung nilagay mo", "i-update mo yung Grocery kanina to 500", "may duplicate, tanggalin mo"):
 - You can find, edit, and delete existing transactions — you're not limited to just adding new ones. Use find_transactions to locate the exact entry (by date/period, keyword, or person) before touching anything. Never call update_transaction or delete_transaction with a guessed id.
-- If find_transactions returns more than one plausible match, list them briefly and ask which one before proceeding.
+- If find_transactions returns more than one plausible match, list them one per line (numbered, e.g. "1. Javier family reunion (₱3,000) on July 26"), not run together in one paragraph — see the formatting rule below — and ask which one before proceeding.
 - Before calling update_transaction or delete_transaction, always state plainly what you're about to change (old value → new value, or "I'll delete ₱X Grocery from July 20") and ask the user to confirm. Only call the tool after they say yes in their next message — never edit or delete on the first message alone.
 - Once confirmed and done, say what changed. Every edit/delete is also visible and reversible from Settings > Recent Actions, but don't rely on that instead of confirming — confirm first.
 - Adding a new transaction (log_transaction) does not need this confirm-first flow — proceed and confirm after, as described above.
@@ -45,7 +45,8 @@ Style:
 - Format peso amounts with ₱ and comma separators.
 - Keep answers short and useful, like a message from a trusted advisor — not a report. Offer a brief insight when it's genuinely useful, but don't pad responses.
 - Only talk about account balances when the question is actually about balance or available funds. Do not append balance figures to answers about spending, categories, tips, or allocation unless the user asked about balance — stay on topic.
-- Reply in plain conversational text only. Never output HTML, XML, or markup-style tags (e.g. no <result>, <div>, or similar) anywhere in your response — not even to structure the answer.`;
+- Reply in plain conversational text only. Never output HTML, XML, or markup-style tags (e.g. no <result>, <div>, or similar) anywhere in your response — not even to structure the answer.
+- Whenever you list more than one item (transactions to pick from, a category-by-category allocation, several tips), put each item on its own line — a real newline between them, numbered or with a short dash — never run them together as one long sentence separated by commas. A wall of text is hard to read on a phone; a short list is not.`;
 
 const GROQ_MODEL = "llama-3.3-70b-versatile";
 
@@ -73,6 +74,18 @@ async function callGroq(messages: unknown[]) {
   return res.json();
 }
 
+/** llama-3.3-70b occasionally emits a malformed tool call (literal `<function=...>` text
+ * instead of a structured call), which Groq rejects with a 400 tool_use_failed. Retrying
+ * the same request once usually gets a clean structured call back. */
+async function callGroqWithRetry(messages: unknown[]) {
+  try {
+    return await callGroq(messages);
+  } catch (err) {
+    console.error("Bes AI: Groq call failed, retrying once:", err);
+    return await callGroq(messages);
+  }
+}
+
 export async function sendChatMessage(history: ChatMessage[]): Promise<string> {
   if (!process.env.GROQ_API_KEY) {
     return "Bes, wala pang GROQ_API_KEY na naka-set sa .env, so hindi pa ako makapag-reply. Pa-set muna niyan.";
@@ -85,56 +98,61 @@ export async function sendChatMessage(history: ChatMessage[]): Promise<string> {
 
   let loggedTransaction = false;
 
-  for (let i = 0; i < 6; i++) {
-    const data = await callGroq(messages);
-    const choice = data.choices?.[0];
-    const message = choice?.message;
-    if (!message) throw new Error("No response from Groq.");
+  try {
+    for (let i = 0; i < 6; i++) {
+      const data = await callGroqWithRetry(messages);
+      const choice = data.choices?.[0];
+      const message = choice?.message;
+      if (!message) throw new Error("No response from Groq.");
 
-    const toolCalls = message.tool_calls as
-      | { id: string; function: { name: string; arguments: string } }[]
-      | undefined;
+      const toolCalls = message.tool_calls as
+        | { id: string; function: { name: string; arguments: string } }[]
+        | undefined;
 
-    if (!toolCalls || toolCalls.length === 0) {
-      if (loggedTransaction) {
-        revalidatePath("/");
-        revalidatePath("/transactions");
-        revalidatePath("/settings");
-      }
-      return message.content ?? "Sorry Bes, wala akong masabi diyan.";
-    }
-
-    messages.push({
-      role: "assistant",
-      content: message.content ?? null,
-      tool_calls: toolCalls,
-    });
-
-    for (const call of toolCalls) {
-      let args: Record<string, unknown> = {};
-      try {
-        const parsed = JSON.parse(call.function.arguments || "{}");
-        args = parsed && typeof parsed === "object" ? parsed : {};
-      } catch {
-        args = {};
+      if (!toolCalls || toolCalls.length === 0) {
+        if (loggedTransaction) {
+          revalidatePath("/");
+          revalidatePath("/transactions");
+          revalidatePath("/settings");
+        }
+        return message.content ?? "Sorry Bes, wala akong masabi diyan.";
       }
 
-      if (
-        call.function.name === "log_transaction" ||
-        call.function.name === "update_transaction" ||
-        call.function.name === "delete_transaction"
-      ) {
-        loggedTransaction = true;
-      }
-
-      const result = await executeTool(call.function.name, args);
       messages.push({
-        role: "tool",
-        tool_call_id: call.id,
-        content: JSON.stringify(result),
+        role: "assistant",
+        content: message.content ?? null,
+        tool_calls: toolCalls,
       });
-    }
-  }
 
-  return "Medyo nagulo ako diyan Bes, pwede mo bang i-rephrase?";
+      for (const call of toolCalls) {
+        let args: Record<string, unknown> = {};
+        try {
+          const parsed = JSON.parse(call.function.arguments || "{}");
+          args = parsed && typeof parsed === "object" ? parsed : {};
+        } catch {
+          args = {};
+        }
+
+        if (
+          call.function.name === "log_transaction" ||
+          call.function.name === "update_transaction" ||
+          call.function.name === "delete_transaction"
+        ) {
+          loggedTransaction = true;
+        }
+
+        const result = await executeTool(call.function.name, args);
+        messages.push({
+          role: "tool",
+          tool_call_id: call.id,
+          content: JSON.stringify(result),
+        });
+      }
+    }
+
+    return "Medyo nagulo ako diyan Bes, pwede mo bang i-rephrase?";
+  } catch (err) {
+    console.error("Bes AI chat failed:", err);
+    return "Medyo nag-glitch ako dyan Bes — pwede mo bang subukan ulit?";
+  }
 }
