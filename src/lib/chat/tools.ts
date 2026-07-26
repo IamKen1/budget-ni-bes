@@ -7,7 +7,7 @@ import {
   monthRange,
 } from "@/lib/queries";
 import { recordActivity } from "@/lib/actions/activity";
-import { transactionSnapshot } from "@/lib/activity-snapshots";
+import { transactionSnapshot, accountSnapshot, categorySnapshot } from "@/lib/activity-snapshots";
 
 function toNumber(value: unknown): number {
   return typeof value === "object" && value !== null && "toNumber" in value
@@ -198,6 +198,57 @@ export const toolDefinitions = [
           id: { type: "string", description: "The transaction id from find_transactions." },
         },
         required: ["id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "manage_account",
+      description:
+        "Create a new account, change an account's monthly deposit target, or archive/restore one — the same things the Accounts page lets a human do. Use this when the user asks you to do it (e.g. 'gawa ka ng bagong account na GCash', 'baguhin mo yung target ng Maribank to 60000') rather than just explaining how. Always confirm before archive, and before create/set_target if any detail was assumed rather than stated.",
+      parameters: {
+        type: "object",
+        properties: {
+          action: { type: "string", enum: ["create", "set_target", "archive", "unarchive"] },
+          name: {
+            type: "string",
+            description: "Account name. For create, the new account's name. For other actions, the existing account to act on (fuzzy-matched).",
+          },
+          type: {
+            type: "string",
+            enum: ["BANK", "CASH", "EWALLET"],
+            description: "Required for create.",
+          },
+          monthlyTarget: { type: "number", description: "Required for set_target." },
+        },
+        required: ["action", "name"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "manage_category",
+      description:
+        "Create a new expense/savings category, change its monthly (or savings goal) target, or archive/restore one — the same things the Categories page lets a human do. Use this when the user asks you to do it (e.g. 'gawa ka ng category na Pet Expenses', 'itaas mo yung Grocery budget to 8000') rather than just explaining how. Always confirm before archive, and before create/set_target if any detail was assumed rather than stated.",
+      parameters: {
+        type: "object",
+        properties: {
+          action: { type: "string", enum: ["create", "set_target", "archive", "unarchive"] },
+          name: {
+            type: "string",
+            description: "Category name. For create, the new category's name. For other actions, the existing category to act on (fuzzy-matched).",
+          },
+          kind: {
+            type: "string",
+            enum: ["EXPENSE", "SAVINGS"],
+            description: "Required for create.",
+          },
+          monthlyTarget: { type: "number", description: "Monthly budget target. For set_target on an EXPENSE category, or the monthly contribution target on a SAVINGS fund." },
+          goalTarget: { type: "number", description: "Long-term savings goal amount. Only meaningful for SAVINGS categories." },
+        },
+        required: ["action", "name"],
       },
     },
   },
@@ -558,6 +609,136 @@ async function toolDeleteTransaction(args: { id: string }) {
   return { success: true, deleted: summarizeTx(existing), activityId: activity.id };
 }
 
+async function toolManageAccount(args: {
+  action: "create" | "set_target" | "archive" | "unarchive";
+  name: string;
+  type?: "BANK" | "CASH" | "EWALLET";
+  monthlyTarget?: number;
+}) {
+  if (args.action === "create") {
+    if (!args.type) return { error: "Need an account type (BANK, CASH, or EWALLET) to create an account." };
+    const existing = await resolveAccount(args.name);
+    if (existing) return { error: `An account matching "${args.name}" already exists: "${existing.name}".` };
+
+    const count = await prisma.account.count();
+    const account = await prisma.account.create({ data: { name: args.name, type: args.type, sortOrder: count } });
+    const activity = await recordActivity({
+      entity: "ACCOUNT",
+      action: "CREATE",
+      entityId: account.id,
+      summary: `Bes AI added account "${account.name}"`,
+      after: accountSnapshot(account),
+    });
+    return { success: true, account: account.name, activityId: activity.id };
+  }
+
+  const account = await resolveAccount(args.name);
+  if (!account) return { error: `No account found matching "${args.name}". Use get_balances to see the real list.` };
+
+  if (args.action === "set_target") {
+    if (args.monthlyTarget === undefined) return { error: "Need a monthlyTarget amount." };
+    const before = accountSnapshot(account);
+    const updated = await prisma.account.update({ where: { id: account.id }, data: { monthlyTarget: args.monthlyTarget } });
+    const activity = await recordActivity({
+      entity: "ACCOUNT",
+      action: "UPDATE",
+      entityId: account.id,
+      summary: `Bes AI updated "${updated.name}" target to ${formatMoney(args.monthlyTarget)}`,
+      before,
+      after: accountSnapshot(updated),
+    });
+    return { success: true, account: updated.name, monthlyTarget: args.monthlyTarget, activityId: activity.id };
+  }
+
+  const archived = args.action === "archive";
+  const before = accountSnapshot(account);
+  const updated = await prisma.account.update({ where: { id: account.id }, data: { archived } });
+  const activity = await recordActivity({
+    entity: "ACCOUNT",
+    action: "UPDATE",
+    entityId: account.id,
+    summary: archived ? `Bes AI archived account "${updated.name}"` : `Bes AI restored account "${updated.name}"`,
+    before,
+    after: accountSnapshot(updated),
+  });
+  return { success: true, account: updated.name, archived, activityId: activity.id };
+}
+
+async function toolManageCategory(args: {
+  action: "create" | "set_target" | "archive" | "unarchive";
+  name: string;
+  kind?: "EXPENSE" | "SAVINGS";
+  monthlyTarget?: number;
+  goalTarget?: number;
+}) {
+  if (args.action === "create") {
+    if (!args.kind) return { error: "Need a kind (EXPENSE or SAVINGS) to create a category." };
+    const existing = await resolveCategory(args.name, args.kind);
+    if (existing) return { error: `A ${args.kind.toLowerCase()} category matching "${args.name}" already exists: "${existing.name}".` };
+
+    const count = await prisma.category.count({ where: { kind: args.kind } });
+    const category = await prisma.category.create({
+      data: {
+        name: args.name,
+        kind: args.kind,
+        monthlyTarget: args.monthlyTarget ?? 0,
+        goalTarget: args.goalTarget ?? 0,
+        sortOrder: count,
+      },
+    });
+    const activity = await recordActivity({
+      entity: "CATEGORY",
+      action: "CREATE",
+      entityId: category.id,
+      summary: `Bes AI added category "${category.name}"`,
+      after: categorySnapshot(category),
+    });
+    return { success: true, category: category.name, activityId: activity.id };
+  }
+
+  const categories = await prisma.category.findMany({ where: { archived: false } });
+  const category =
+    categories.find((c) => c.name.toLowerCase() === args.name.toLowerCase()) ??
+    categories.find((c) => c.name.toLowerCase().includes(args.name.toLowerCase()));
+  if (!category) return { error: `No category found matching "${args.name}". Use get_budget_progress or get_savings_progress to see the real list.` };
+
+  if (args.action === "set_target") {
+    if (args.monthlyTarget === undefined && args.goalTarget === undefined) {
+      return { error: "Need a monthlyTarget and/or goalTarget amount." };
+    }
+    const before = categorySnapshot(category);
+    const updated = await prisma.category.update({
+      where: { id: category.id },
+      data: {
+        monthlyTarget: args.monthlyTarget ?? toNumber(category.monthlyTarget),
+        goalTarget: args.goalTarget ?? toNumber(category.goalTarget),
+      },
+    });
+    const activity = await recordActivity({
+      entity: "CATEGORY",
+      action: "UPDATE",
+      entityId: category.id,
+      summary: `Bes AI updated "${updated.name}" target`,
+      before,
+      after: categorySnapshot(updated),
+    });
+    return { success: true, category: updated.name, activityId: activity.id };
+  }
+
+  const archived = args.action === "archive";
+  const before = categorySnapshot(category);
+  const updated = await prisma.category.update({ where: { id: category.id }, data: { archived } });
+  const activity = await recordActivity({
+    entity: "CATEGORY",
+    action: "UPDATE",
+    entityId: category.id,
+    summary: archived ? `Bes AI archived category "${updated.name}"` : `Bes AI restored category "${updated.name}"`,
+    before,
+    after: categorySnapshot(updated),
+  });
+  return { success: true, category: updated.name, archived, activityId: activity.id };
+}
+
 export async function executeTool(name: string, args: Record<string, unknown>) {
   switch (name) {
     case "get_balances":
@@ -582,6 +763,10 @@ export async function executeTool(name: string, args: Record<string, unknown>) {
       );
     case "delete_transaction":
       return toolDeleteTransaction(args as { id: string });
+    case "manage_account":
+      return toolManageAccount(args as Parameters<typeof toolManageAccount>[0]);
+    case "manage_category":
+      return toolManageCategory(args as Parameters<typeof toolManageCategory>[0]);
     default:
       return { error: `Unknown tool: ${name}` };
   }
