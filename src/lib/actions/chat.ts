@@ -62,25 +62,46 @@ Style:
 - Reply in plain conversational text only. Never output HTML, XML, or markup-style tags (e.g. no <result>, <div>, or similar) anywhere in your response — not even to structure the answer.
 - Whenever you list more than one item (transactions to pick from, a category-by-category allocation, several tips), put each item on its own line — a real newline between them, numbered or with a short dash — never run them together as one long sentence separated by commas. A wall of text is hard to read on a phone; a short list is not.`;
 
-const GROQ_MODEL = "llama-3.3-70b-versatile";
+// Two OpenAI-compatible providers, tried in order. Groq is primary (fast, but a low
+// daily free-tier token cap we kept hitting); Gemini via Google AI Studio's OpenAI-
+// compatible endpoint is the fallback so the family never sees a dead chat mid-day.
+// Both speak the same request/response shape, so this stays provider-agnostic.
+type Provider = "groq" | "gemini";
 
-class GroqApiError extends Error {
+const PROVIDERS: Record<Provider, { url: string; model: string; apiKey: string | undefined }> = {
+  groq: {
+    url: "https://api.groq.com/openai/v1/chat/completions",
+    model: "llama-3.3-70b-versatile",
+    apiKey: process.env.GROQ_API_KEY,
+  },
+  gemini: {
+    url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+    // "-latest" alias so this doesn't break again as dated model versions age out.
+    model: "gemini-flash-latest",
+    apiKey: process.env.AI_STUDIO_KEY,
+  },
+};
+
+class AiProviderError extends Error {
   status: number;
-  constructor(status: number, body: string) {
-    super(`Groq API error ${status}: ${body}`);
+  provider: Provider;
+  constructor(provider: Provider, status: number, body: string) {
+    super(`${provider} API error ${status}: ${body}`);
     this.status = status;
+    this.provider = provider;
   }
 }
 
-async function callGroq(messages: unknown[]) {
-  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+async function callProvider(provider: Provider, messages: unknown[]) {
+  const config = PROVIDERS[provider];
+  const res = await fetch(config.url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+      Authorization: `Bearer ${config.apiKey}`,
     },
     body: JSON.stringify({
-      model: GROQ_MODEL,
+      model: config.model,
       messages,
       tools: toolDefinitions,
       tool_choice: "auto",
@@ -90,36 +111,58 @@ async function callGroq(messages: unknown[]) {
 
   if (!res.ok) {
     const text = await res.text();
-    throw new GroqApiError(res.status, text);
+    throw new AiProviderError(provider, res.status, text);
   }
 
   return res.json();
 }
 
-/** llama-3.3-70b occasionally emits a malformed tool call (literal `<function=...>` text
- * instead of a structured call), which Groq rejects with a 400 tool_use_failed. This is
+/** Models occasionally emit a malformed tool call (literal `<function=...>` text instead
+ * of a structured call), which the provider rejects with a 400 tool_use_failed. This is
  * more likely on questions needing multiple/chained tool calls, so retry a few times —
  * it's usually just a stochastic formatting slip and a plain retry gets a clean call back.
  * A 429 (rate limit) is different — retrying immediately can't fix it, just burns more of
- * the quota and returns the same error, so that fails fast instead. */
-async function callGroqWithRetry(messages: unknown[], attempts = 3) {
+ * the quota and returns the same error, so that fails fast instead (to let the caller
+ * fall back to the other provider rather than waste retries on a dead one). */
+async function callProviderWithRetry(provider: Provider, messages: unknown[], attempts = 3) {
   let lastErr: unknown;
   for (let i = 0; i < attempts; i++) {
     try {
-      return await callGroq(messages);
+      return await callProvider(provider, messages);
     } catch (err) {
       lastErr = err;
-      if (err instanceof GroqApiError && err.status === 429) throw err;
-      console.error(`Bes AI: Groq call failed (attempt ${i + 1}/${attempts}):`, err);
+      if (err instanceof AiProviderError && err.status === 429) throw err;
+      console.error(`Bes AI: ${provider} call failed (attempt ${i + 1}/${attempts}):`, err);
     }
   }
   throw lastErr;
 }
 
-export async function sendChatMessage(history: ChatMessage[]): Promise<string> {
-  if (!process.env.GROQ_API_KEY) {
-    return "Bes, wala pang GROQ_API_KEY na naka-set sa .env, so hindi pa ako makapag-reply. Pa-set muna niyan.";
+/** Tries the given provider; if it fails and a fallback provider has a key configured,
+ * switches to it — permanently for the rest of this conversation turn (via providerRef),
+ * so the tool-calling loop below doesn't ping-pong back to a provider that just failed. */
+async function callAi(messages: unknown[], providerRef: { current: Provider }) {
+  try {
+    return await callProviderWithRetry(providerRef.current, messages);
+  } catch (err) {
+    const fallback: Provider = providerRef.current === "groq" ? "gemini" : "groq";
+    if (!PROVIDERS[fallback].apiKey) throw err;
+    console.error(`Bes AI: ${providerRef.current} unavailable, falling back to ${fallback}:`, err);
+    providerRef.current = fallback;
+    return await callProviderWithRetry(fallback, messages);
   }
+}
+
+export async function sendChatMessage(history: ChatMessage[]): Promise<string> {
+  const primaryProvider: Provider | null = PROVIDERS.groq.apiKey
+    ? "groq"
+    : PROVIDERS.gemini.apiKey
+    ? "gemini"
+    : null;
+  if (!primaryProvider) {
+    return "Bes, wala pang AI API key na naka-set sa .env (GROQ_API_KEY o AI_STUDIO_KEY), so hindi pa ako makapag-reply. Pa-set muna niyan.";
+  }
+  const providerRef = { current: primaryProvider };
 
   const messages: unknown[] = [
     { role: "system", content: SYSTEM_PROMPT },
@@ -130,7 +173,7 @@ export async function sendChatMessage(history: ChatMessage[]): Promise<string> {
 
   try {
     for (let i = 0; i < 6; i++) {
-      const data = await callGroqWithRetry(messages);
+      const data = await callAi(messages, providerRef);
       const choice = data.choices?.[0];
       const message = choice?.message;
       if (!message) throw new Error("No response from Groq.");
@@ -185,7 +228,9 @@ export async function sendChatMessage(history: ChatMessage[]): Promise<string> {
     return "Medyo nagulo ako diyan Bes, pwede mo bang i-rephrase?";
   } catch (err) {
     console.error("Bes AI chat failed:", err);
-    if (err instanceof GroqApiError && err.status === 429) {
+    // Both providers were tried (callAi falls back automatically) and both failed —
+    // only then is it worth telling the user it's a quota issue vs. a generic glitch.
+    if (err instanceof AiProviderError && err.status === 429) {
       return "Naubos muna yung AI message quota namin for today Bes — nire-reset siya every 24 hours. Subukan ulit mamaya, sorry sa abala!";
     }
     return "Medyo nag-glitch ako dyan Bes — pwede mo bang subukan ulit?";
