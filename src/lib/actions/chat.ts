@@ -12,7 +12,7 @@ const SYSTEM_PROMPT = `You are "Bes AI", the financial advisor built into Budget
 
 Who you're talking to:
 - If this is the very start of a conversation (no prior messages) and you don't yet know whether you're talking to Jenna or Kenneth, ask first before anything else — e.g. "Hi Bes! Sino 'to, si Jenna o si Kenneth?"
-- Once you learn it's Jenna, greet her warmly right away: "Good day, Jenna! Ang ganda mo ngayon 😊" — then continue with whatever she asked. If it's Kenneth, just greet him normally, no need for that line.
+- Once you learn it's Jenna, greet her with a warm, flattering line before getting into whatever she asked — but make up a fresh one each time, don't reuse the same line twice in a row. Vary the compliment and who it's from: sometimes about her ("Good day, Jenna! Ang ganda mo ngayon 😊"), sometimes about how Kenneth feels about her ("Good day Jenna! Alam mo ba ang layo ng mahal sayo ni Kenneth?"), sometimes about her as a mom/partner/how she's doing with the budget — keep inventing new angles rather than repeating. If it's Kenneth, just greet him normally, no need for that line.
 - Don't ask again once you already know who it is within the same conversation.
 
 Handling free-form entries (e.g. "gumastos kami ng 3000 kahapon sa javier reunion"):
@@ -30,6 +30,15 @@ Accounts vs. savings funds — these are different things, don't mix them up:
 - get_balances returns ACCOUNT balances (BPI, Maribank, Cash on Hand — where the physical money sits).
 - get_savings_progress returns FUND balances (Emergency Fund, Car Fund, Baby Fund, etc. — long-term goals tracked separately from account balances).
 - Any question naming a specific fund ("magkano na yung emergency fund", "how much is in Baby Fund", "malapit na ba matapos yung car fund") must be answered with get_savings_progress, never get_balances. A fund's balance is not the same number as any account's balance — never substitute one for the other or guess.
+- For timeline/projection questions about a fund ("kailan pa kami magkakabahay", "malapit na ba matapos yung car fund"), get_savings_progress already includes estimatedMonthsToReachGoal and estimatedDateToReachGoal computed from the fund's real saving pace — just call it once and report those fields directly. Don't try to chain multiple tools or compute the projection yourself.
+
+Withdrawing from savings — two different scenarios, don't conflate them:
+- Spent directly for the fund's own purpose (e.g. "binayaran namin ng car fund yung car repair", a car expense paid straight from the Car Fund sitting in BPI): this is ONE log_transaction call — entryType SAVINGS_WITHDRAW, categoryName = the fund, accountName = whichever account actually holds that fund's money (e.g. BPI; ask if unclear). The money never becomes general spending money, so nothing else needs logging.
+- Moved out to become general spending money (e.g. "kinuha namin sa emergency fund yung 5000 para gastusin", "nag-withdraw kami sa car fund papunta sa Maribank"): this needs TWO log_transaction calls, matching how the family's old spreadsheet tracked it:
+  1. entryType SAVINGS_WITHDRAW, categoryName = the fund, accountName = whichever account holds that fund's money.
+  2. entryType INCOME, accountName = the spending account the money now sits in (e.g. Maribank), no categoryName.
+  Confirm both legs clearly once logged, e.g. "Nabawas ₱5,000 sa Emergency Fund (BPI), at nadagdag sa Maribank bilang spending money." Don't log just one side — that leaves the money silently missing from wherever it landed.
+- If it's not clear which of the two this is, ask rather than guess.
 
 Tips and advice:
 - Whenever asked for tips or advice, ground them in the user's actual numbers (categories nearing/over budget, spending trends, low balances) — never generic textbook advice.
@@ -80,15 +89,20 @@ async function callGroq(messages: unknown[]) {
 }
 
 /** llama-3.3-70b occasionally emits a malformed tool call (literal `<function=...>` text
- * instead of a structured call), which Groq rejects with a 400 tool_use_failed. Retrying
- * the same request once usually gets a clean structured call back. */
-async function callGroqWithRetry(messages: unknown[]) {
-  try {
-    return await callGroq(messages);
-  } catch (err) {
-    console.error("Bes AI: Groq call failed, retrying once:", err);
-    return await callGroq(messages);
+ * instead of a structured call), which Groq rejects with a 400 tool_use_failed. This is
+ * more likely on questions needing multiple/chained tool calls, so retry a few times —
+ * it's usually just a stochastic formatting slip and a plain retry gets a clean call back. */
+async function callGroqWithRetry(messages: unknown[], attempts = 3) {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await callGroq(messages);
+    } catch (err) {
+      lastErr = err;
+      console.error(`Bes AI: Groq call failed (attempt ${i + 1}/${attempts}):`, err);
+    }
   }
+  throw lastErr;
 }
 
 export async function sendChatMessage(history: ChatMessage[]): Promise<string> {

@@ -4,7 +4,6 @@ import { formatMoney } from "@/lib/format";
 import {
   getAccountsWithBalances,
   getExpenseCategoriesWithProgress,
-  getSavingsCategoriesWithProgress,
   monthRange,
 } from "@/lib/queries";
 import { recordActivity } from "@/lib/actions/activity";
@@ -88,7 +87,7 @@ export const toolDefinitions = [
     function: {
       name: "get_savings_progress",
       description:
-        "Get every savings fund (Emergency Fund, Car Fund, Baby Fund, etc.) with its long-term goal target, total deposited, total withdrawn, and current net balance. Use this — not get_balances — for any question about a specific fund's amount, e.g. 'magkano na yung emergency fund', 'how much is in Baby Fund'. Fund balances are NOT the same as account balances.",
+        "Get every savings fund (Emergency Fund, Car Fund, Home Fund, Baby Fund, etc.) with its long-term goal target and current net balance. Use this — not get_balances — for any question about a specific fund's amount, e.g. 'magkano na yung emergency fund', 'how much is in Baby Fund'. Fund balances are NOT the same as account balances. Also already includes a projection (averageMonthlyNetSaved, estimatedMonthsToReachGoal, estimatedDateToReachGoal) based on the fund's actual saving pace since its first deposit — use those fields directly to answer 'when will we have enough for X' questions instead of trying to compute it yourself from other tools.",
       parameters: { type: "object", properties: {}, required: [] },
     },
   },
@@ -269,15 +268,53 @@ async function toolGetBudgetProgress() {
 }
 
 async function toolGetSavingsProgress() {
-  const funds = await getSavingsCategoriesWithProgress();
-  return funds.map((f) => ({
-    fund: f.name,
-    goalTarget: f.goalTarget,
-    depositedThisMonth: f.periodTotal,
-    currentBalance: f.allTimeTotal,
-    remainingToGoal: f.goalTarget > 0 ? f.goalTarget - f.allTimeTotal : null,
-    percentOfGoal: f.goalTarget > 0 ? Math.round((f.allTimeTotal / f.goalTarget) * 100) : null,
-  }));
+  const categories = await prisma.category.findMany({
+    where: { kind: "SAVINGS", archived: false },
+    include: {
+      transactions: { where: { entryType: { in: ["SAVINGS_DEPOSIT", "SAVINGS_WITHDRAW"] } } },
+    },
+  });
+
+  const now = dayjs();
+
+  return categories.map((c) => {
+    const goalTarget = toNumber(c.goalTarget);
+    let currentBalance = 0;
+    let firstDate: Date | null = null;
+    for (const tx of c.transactions) {
+      const amount = toNumber(tx.amount);
+      currentBalance += tx.entryType === "SAVINGS_WITHDRAW" ? -amount : amount;
+      if (!firstDate || tx.date < firstDate) firstDate = tx.date;
+    }
+
+    const remainingToGoal = goalTarget > 0 ? goalTarget - currentBalance : null;
+    // Projection: net saved per month since the first deposit, used to estimate
+    // when the goal will be reached — precomputed here rather than asking the
+    // model to chain tool calls and do the math itself, which is unreliable.
+    let averageMonthlyNet: number | null = null;
+    let estimatedMonthsToGoal: number | null = null;
+    if (firstDate) {
+      const monthsActive = Math.max(1, now.diff(firstDate, "month", true));
+      averageMonthlyNet = currentBalance / monthsActive;
+      if (remainingToGoal !== null && remainingToGoal > 0 && averageMonthlyNet > 0) {
+        estimatedMonthsToGoal = Math.ceil(remainingToGoal / averageMonthlyNet);
+      }
+    }
+
+    return {
+      fund: c.name,
+      goalTarget,
+      currentBalance,
+      remainingToGoal,
+      percentOfGoal: goalTarget > 0 ? Math.round((currentBalance / goalTarget) * 100) : null,
+      averageMonthlyNetSaved: averageMonthlyNet !== null ? Math.round(averageMonthlyNet) : null,
+      estimatedMonthsToReachGoal: estimatedMonthsToGoal,
+      estimatedDateToReachGoal:
+        estimatedMonthsToGoal !== null
+          ? now.add(estimatedMonthsToGoal, "month").format("MMMM YYYY")
+          : null,
+    };
+  });
 }
 
 async function toolLogTransaction(args: {
