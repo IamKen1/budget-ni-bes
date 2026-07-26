@@ -135,6 +135,7 @@ export default async function DashboardPage() {
               label={`${account.name} — spending money`}
               value={account.balance}
               target={account.monthlyTarget}
+              leftValue={account.balance}
             />
           </div>
         ))}

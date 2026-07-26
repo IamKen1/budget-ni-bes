@@ -113,6 +113,8 @@ export async function sendChatMessage(history: ChatMessage[]): Promise<string> {
         if (loggedTransaction) {
           revalidatePath("/");
           revalidatePath("/transactions");
+          revalidatePath("/accounts");
+          revalidatePath("/categories");
           revalidatePath("/settings");
         }
         return message.content ?? "Sorry Bes, wala akong masabi diyan.";

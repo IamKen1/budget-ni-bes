@@ -6,16 +6,21 @@ export function ProgressBar({
   target,
   tone = "zinc",
   showVariance = true,
+  leftValue,
 }: {
   label: string;
   value: number;
   target: number;
   tone?: "zinc" | "emerald";
   showVariance?: boolean;
+  /** Override the "left"/"to go" amount shown below the bar. Defaults to target - value
+   * (right for a spending budget). Pass the account balance itself for a "spending money"
+   * bar, where value/target track deposits, not spend-vs-limit. */
+  leftValue?: number;
 }) {
   const pct = target > 0 ? Math.min(100, Math.round((value / target) * 100)) : value > 0 ? 100 : 0;
-  const overBudget = tone === "zinc" && target > 0 && value > target;
-  const variance = target - value;
+  const variance = leftValue ?? target - value;
+  const overBudget = tone === "zinc" && (leftValue !== undefined ? variance < 0 : target > 0 && value > target);
 
   const barColor = overBudget
     ? "bg-red-500"

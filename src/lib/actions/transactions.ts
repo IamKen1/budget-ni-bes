@@ -54,6 +54,8 @@ async function insertTransaction(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/transactions");
+  revalidatePath("/accounts");
+  revalidatePath("/categories");
 
   return activity.id;
 }
@@ -89,6 +91,8 @@ export async function deleteTransaction(id: string) {
 
   revalidatePath("/");
   revalidatePath("/transactions");
+  revalidatePath("/accounts");
+  revalidatePath("/categories");
 
   return { activityId: activity.id };
 }
