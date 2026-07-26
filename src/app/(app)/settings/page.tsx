@@ -33,6 +33,30 @@ export default async function SettingsPage() {
 
       <section>
         <h2 className="px-1 pb-2 text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+          Export
+        </h2>
+        <a
+          href="/api/export"
+          className="flex items-center justify-between rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition active:scale-[0.99] dark:border-zinc-800 dark:bg-zinc-900"
+        >
+          <div>
+            <p className="text-sm font-medium">Download as Excel</p>
+            <p className="text-xs text-zinc-400">All transactions, accounts, budget, and savings funds — .xlsx</p>
+          </div>
+          <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5 flex-shrink-0 text-zinc-400">
+            <path
+              d="M12 4v12m0 0-4-4m4 4 4-4M5 20h14"
+              stroke="currentColor"
+              strokeWidth={1.8}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </a>
+      </section>
+
+      <section>
+        <h2 className="px-1 pb-2 text-sm font-semibold text-zinc-500 dark:text-zinc-400">
           Danger Zone
         </h2>
         <ClearDataForm />

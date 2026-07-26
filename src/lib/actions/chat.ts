@@ -64,6 +64,14 @@ Style:
 
 const GROQ_MODEL = "llama-3.3-70b-versatile";
 
+class GroqApiError extends Error {
+  status: number;
+  constructor(status: number, body: string) {
+    super(`Groq API error ${status}: ${body}`);
+    this.status = status;
+  }
+}
+
 async function callGroq(messages: unknown[]) {
   const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
@@ -82,7 +90,7 @@ async function callGroq(messages: unknown[]) {
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Groq API error ${res.status}: ${text}`);
+    throw new GroqApiError(res.status, text);
   }
 
   return res.json();
@@ -91,7 +99,9 @@ async function callGroq(messages: unknown[]) {
 /** llama-3.3-70b occasionally emits a malformed tool call (literal `<function=...>` text
  * instead of a structured call), which Groq rejects with a 400 tool_use_failed. This is
  * more likely on questions needing multiple/chained tool calls, so retry a few times —
- * it's usually just a stochastic formatting slip and a plain retry gets a clean call back. */
+ * it's usually just a stochastic formatting slip and a plain retry gets a clean call back.
+ * A 429 (rate limit) is different — retrying immediately can't fix it, just burns more of
+ * the quota and returns the same error, so that fails fast instead. */
 async function callGroqWithRetry(messages: unknown[], attempts = 3) {
   let lastErr: unknown;
   for (let i = 0; i < attempts; i++) {
@@ -99,6 +109,7 @@ async function callGroqWithRetry(messages: unknown[], attempts = 3) {
       return await callGroq(messages);
     } catch (err) {
       lastErr = err;
+      if (err instanceof GroqApiError && err.status === 429) throw err;
       console.error(`Bes AI: Groq call failed (attempt ${i + 1}/${attempts}):`, err);
     }
   }
@@ -174,6 +185,9 @@ export async function sendChatMessage(history: ChatMessage[]): Promise<string> {
     return "Medyo nagulo ako diyan Bes, pwede mo bang i-rephrase?";
   } catch (err) {
     console.error("Bes AI chat failed:", err);
+    if (err instanceof GroqApiError && err.status === 429) {
+      return "Naubos muna yung AI message quota namin for today Bes — nire-reset siya every 24 hours. Subukan ulit mamaya, sorry sa abala!";
+    }
     return "Medyo nag-glitch ako dyan Bes — pwede mo bang subukan ulit?";
   }
 }
