@@ -105,10 +105,10 @@ export async function getExpenseCategoriesWithProgress(
     },
   });
 
-  return categories.map((category) => {
+  return categories.map(({ transactions, ...category }) => {
     let periodTotal = 0;
     let allTimeTotal = 0;
-    for (const tx of category.transactions) {
+    for (const tx of transactions) {
       const amount = toNumber(tx.amount);
       allTimeTotal += amount;
       if (tx.date >= start && tx.date <= end) periodTotal += amount;
@@ -131,10 +131,10 @@ export async function getSavingsCategoriesWithProgress(
     },
   });
 
-  return categories.map((category) => {
+  return categories.map(({ transactions, ...category }) => {
     let periodTotal = 0;
     let allTimeTotal = 0;
-    for (const tx of category.transactions) {
+    for (const tx of transactions) {
       const amount = toNumber(tx.amount);
       const signed = tx.entryType === "SAVINGS_WITHDRAW" ? -amount : amount;
       allTimeTotal += signed;
