@@ -80,10 +80,10 @@ Style:
 - Always use the tools to pull real numbers — never guess or estimate.
 - When you log a transaction, confirm exactly what was saved (amount, category, account, date).
 - Format peso amounts with ₱ and comma separators.
-- Keep answers short and useful, like a message from a trusted advisor — not a report. Offer a brief insight when it's genuinely useful, but don't pad responses.
+- Keep answers short and useful, like a message from a trusted advisor — not a report. A tips or allocation answer should read like 4-6 short lines total, not a bulleted essay with a sub-explanation under every point. Offer a brief insight when it's genuinely useful, but don't pad responses, and don't always close with a generic "let me know how you'd like to proceed"-style line — vary it or skip it.
 - Only talk about account balances when the question is actually about balance or available funds. Do not append balance figures to answers about spending, categories, tips, or allocation unless the user asked about balance — stay on topic.
-- Reply in plain conversational text only. Never output HTML, XML, or markup-style tags (e.g. no <result>, <div>, or similar) anywhere in your response — not even to structure the answer.
-- Whenever you list more than one item (transactions to pick from, a category-by-category allocation, several tips), put each item on its own line — a real newline between them, numbered or with a short dash — never run them together as one long sentence separated by commas. A wall of text is hard to read on a phone; a short list is not.`;
+- This chat only renders plain text, not markdown — never use **bold**, tables (| like | this |), headers (#), or any other markdown syntax, since the symbols themselves would show up literally on screen instead of being styled. For emphasis just say the number or word plainly, or lead with it. Never output HTML, XML, or markup-style tags (e.g. no <result>, <div>, or similar) either.
+- Whenever you list more than one item (transactions to pick from, a category-by-category allocation, several tips), put each item on its own line — a real newline between them, numbered or with a short dash — never run them together as one long sentence separated by commas, and never as a markdown table. A wall of text is hard to read on a phone; a short list is not.`;
 
 // An ordered chain of OpenAI-compatible providers/models, all free tier, tried in
 // order until one answers. More entries = more daily runway for zero cost, since each
@@ -262,6 +262,35 @@ async function callAi(
   throw lastErr;
 }
 
+/** The chat UI renders plain text only (no markdown parser), and the free fallback
+ * models don't all follow the "no markdown" prompt instruction as reliably as the
+ * primary one — so this is a safety net that strips common markdown syntax from
+ * whatever comes back, regardless of which provider answered. */
+function stripMarkdown(text: string): string {
+  let out = text;
+  out = out.replace(/```[\s\S]*?```/g, (block) => block.replace(/```/g, ""));
+  out = out.replace(/\*\*\*(.+?)\*\*\*/g, "$1");
+  out = out.replace(/\*\*(.+?)\*\*/g, "$1");
+  out = out.replace(/__(.+?)__/g, "$1");
+  out = out.replace(/(^|[^*])\*(?!\*)([^*\n]+?)\*(?!\*)/g, "$1$2");
+  out = out.replace(/^[ \t]*#{1,6}[ \t]+/gm, "");
+  // Table separator rows, e.g. "|---|---|" or ":--|--:". Note: [ \t] not \s here —
+  // \s also matches newlines, which would swallow the line break into the match and
+  // silently delete it (the replacement callback only returns the row text).
+  out = out.replace(/^[ \t]*\|?[ \t:|-]*-{2,}[ \t:|-]*\|?[ \t]*$/gm, "");
+  // Remaining table rows: "| a | b |" -> "a — b"
+  out = out.replace(/^[ \t]*\|(.+)\|[ \t]*$/gm, (_m, row: string) =>
+    row
+      .split("|")
+      .map((c) => c.trim())
+      .filter(Boolean)
+      .join(" — ")
+  );
+  out = out.replace(/\|/g, " ");
+  out = out.replace(/\n{3,}/g, "\n\n");
+  return out.trim();
+}
+
 // Client sends the full running conversation on every turn (stateless API), and it only
 // grows. Past a point that's pure token waste — the model re-fetches real numbers from
 // tools every time anyway, it never relies on old chat text for data. Cap what we forward,
@@ -325,7 +354,7 @@ export async function sendChatMessage(history: ChatMessage[]): Promise<string> {
           revalidatePath("/categories");
           revalidatePath("/settings");
         }
-        return message.content ?? "Sorry Bes, wala akong masabi diyan.";
+        return message.content ? stripMarkdown(message.content) : "Sorry Bes, wala akong masabi diyan.";
       }
 
       messages.push({
