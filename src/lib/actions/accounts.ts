@@ -98,6 +98,28 @@ export async function updateAccountName(formData: FormData) {
   return { activityId: activity.id };
 }
 
+export async function moveAccount(id: string, direction: "up" | "down") {
+  const accounts = await prisma.account.findMany({ orderBy: { sortOrder: "asc" } });
+  const index = accounts.findIndex((a) => a.id === id);
+  if (index === -1) return { error: "Account not found." };
+
+  const swapIndex = direction === "up" ? index - 1 : index + 1;
+  if (swapIndex < 0 || swapIndex >= accounts.length) return {};
+
+  const current = accounts[index];
+  const swapWith = accounts[swapIndex];
+
+  await prisma.$transaction([
+    prisma.account.update({ where: { id: current.id }, data: { sortOrder: swapWith.sortOrder } }),
+    prisma.account.update({ where: { id: swapWith.id }, data: { sortOrder: current.sortOrder } }),
+  ]);
+
+  revalidatePath("/accounts");
+  revalidatePath("/");
+
+  return {};
+}
+
 const targetSchema = z.object({
   id: z.string().min(1),
   monthlyTarget: z.coerce.number().min(0),
