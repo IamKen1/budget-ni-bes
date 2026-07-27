@@ -333,7 +333,13 @@ export async function sendChatMessage(history: ChatMessage[]): Promise<string> {
     ...trimHistory(history).map((m) => ({ role: m.role, content: m.content })),
   ];
 
-  let loggedTransaction = false;
+  // Revalidate whenever any tool ran this turn, rather than allowlisting specific
+  // "mutating" tool names — that list drifted out of sync before (manage_account and
+  // manage_category were never added to it, so new accounts/categories saved fine but
+  // silently didn't show up until something else happened to revalidate the page).
+  // revalidatePath is cheap and idempotent, so it's fine to call even after a
+  // read-only tool like get_balances.
+  let anyToolCalled = false;
 
   try {
     for (let i = 0; i < 6; i++) {
@@ -347,7 +353,7 @@ export async function sendChatMessage(history: ChatMessage[]): Promise<string> {
         | undefined;
 
       if (!toolCalls || toolCalls.length === 0) {
-        if (loggedTransaction) {
+        if (anyToolCalled) {
           revalidatePath("/");
           revalidatePath("/transactions");
           revalidatePath("/accounts");
@@ -356,6 +362,8 @@ export async function sendChatMessage(history: ChatMessage[]): Promise<string> {
         }
         return message.content ? stripMarkdown(message.content) : "Sorry Bes, wala akong masabi diyan.";
       }
+
+      anyToolCalled = true;
 
       messages.push({
         role: "assistant",
@@ -370,15 +378,6 @@ export async function sendChatMessage(history: ChatMessage[]): Promise<string> {
           args = parsed && typeof parsed === "object" ? parsed : {};
         } catch {
           args = {};
-        }
-
-        if (
-          call.function.name === "log_transaction" ||
-          call.function.name === "update_transaction" ||
-          call.function.name === "delete_transaction" ||
-          call.function.name === "reset_all_transactions"
-        ) {
-          loggedTransaction = true;
         }
 
         const result = await executeTool(call.function.name, args);
