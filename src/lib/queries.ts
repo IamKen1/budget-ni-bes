@@ -84,6 +84,80 @@ export async function getTotalBalance(): Promise<number> {
   return accounts.reduce((sum, a) => sum + a.balance, 0);
 }
 
+export type MonthlyBalanceRow = {
+  monthKey: string;
+  label: string;
+  balances: Record<string, number>;
+};
+
+/**
+ * Account balances are a running total, never reset at month end (like a real bank
+ * account) — there's no stored "closing balance" anywhere. This reconstructs what the
+ * balance was as of the end of each past month by replaying transactions in date order
+ * and snapshotting the running totals whenever a month boundary is crossed.
+ */
+export async function getMonthlyAccountBalanceHistory(): Promise<{
+  accounts: SerializedAccount[];
+  rows: MonthlyBalanceRow[];
+}> {
+  const [accounts, transactions] = await Promise.all([
+    prisma.account.findMany({ orderBy: { sortOrder: "asc" } }),
+    prisma.transaction.findMany({ orderBy: { date: "asc" } }),
+  ]);
+
+  const serialized = accounts.map(serializeAccount);
+  if (transactions.length === 0) {
+    return { accounts: serialized, rows: [] };
+  }
+
+  const running = new Map<string, number>();
+  for (const a of accounts) running.set(a.id, 0);
+
+  const apply = (tx: (typeof transactions)[number]) => {
+    const amount = toNumber(tx.amount);
+    const add = (id: string | null, delta: number) => {
+      if (!id) return;
+      running.set(id, (running.get(id) ?? 0) + delta);
+    };
+    switch (tx.entryType) {
+      case "INCOME":
+      case "SAVINGS_DEPOSIT":
+        add(tx.accountId, amount);
+        break;
+      case "EXPENSE":
+      case "SAVINGS_WITHDRAW":
+        add(tx.accountId, -amount);
+        break;
+      case "TRANSFER":
+        add(tx.accountId, -amount);
+        add(tx.toAccountId, amount);
+        break;
+    }
+  };
+
+  const firstMonth = dayjs(transactions[0].date).startOf("month");
+  const lastMonth = dayjs().startOf("month");
+
+  const rows: MonthlyBalanceRow[] = [];
+  let txIndex = 0;
+  let cursor = firstMonth;
+  while (cursor.valueOf() <= lastMonth.valueOf()) {
+    const monthEndMs = cursor.endOf("month").valueOf();
+    while (txIndex < transactions.length && transactions[txIndex].date.getTime() <= monthEndMs) {
+      apply(transactions[txIndex]);
+      txIndex++;
+    }
+    rows.push({
+      monthKey: cursor.format("YYYY-MM"),
+      label: cursor.format("MMMM YYYY"),
+      balances: Object.fromEntries(accounts.map((a) => [a.id, running.get(a.id) ?? 0])),
+    });
+    cursor = cursor.add(1, "month");
+  }
+
+  return { accounts: serialized, rows: rows.reverse() };
+}
+
 export type CategoryProgress = Omit<Category, "monthlyTarget" | "goalTarget"> & {
   monthlyTarget: number;
   goalTarget: number;
