@@ -255,6 +255,30 @@ export const toolDefinitions = [
   {
     type: "function",
     function: {
+      name: "transfer_between_accounts",
+      description:
+        "Move general spending money directly from one account to another, e.g. 'mag-transfer ka ng 2000 galing BPI papunta Maribank'. This is for moving already-general money between accounts — NOT for savings funds. If the money is going into or out of a savings fund (Emergency Fund, Car Fund, etc.), use log_transaction with SAVINGS_DEPOSIT/SAVINGS_WITHDRAW instead, per the withdrawing-from-savings rules.",
+      parameters: {
+        type: "object",
+        properties: {
+          amount: { type: "number", description: "Peso amount, positive number." },
+          fromAccountName: { type: "string", description: "Account the money is moving out of, e.g. 'BPI'." },
+          toAccountName: { type: "string", description: "Account the money is moving into, e.g. 'Maribank'." },
+          person: {
+            type: "string",
+            enum: ["JENNA", "KENNETH", "SHARED"],
+            description: "Who this transfer is for. Default SHARED if unclear.",
+          },
+          note: { type: "string", description: "Optional short note." },
+          date: { type: "string", description: "Date in YYYY-MM-DD format. Defaults to today if omitted." },
+        },
+        required: ["amount", "fromAccountName", "toAccountName"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "reset_all_transactions",
       description:
         "DESTRUCTIVE — deletes every transaction so every account and fund balance resets to zero (accounts, categories, and their targets are kept as-is). Same action as Settings > Danger Zone > Clear all transactions, gated by the same app passcode. Optionally logs one starting INCOME transaction right after clearing, so an account begins at a chosen balance instead of zero. Never call this unless: (1) you've plainly stated what will happen — everything deleted, every balance to zero, then the new starting amount if one was given — and the user replied yes to that in their next message, AND (2) the user has given you the app passcode in this conversation for this request. Never guess, reuse, or ask for the passcode before the user has already agreed to proceed.",
@@ -765,6 +789,66 @@ async function toolManageCategory(args: {
   return { success: true, category: updated.name, archived, activityId: activity.id };
 }
 
+async function toolTransferBetweenAccounts(args: {
+  amount: number;
+  fromAccountName: string;
+  toAccountName: string;
+  person?: "JENNA" | "KENNETH" | "SHARED";
+  note?: string;
+  date?: string;
+}) {
+  if (!args.amount || args.amount <= 0) {
+    return { error: "Amount must be a positive number." };
+  }
+
+  const from = await resolveAccount(args.fromAccountName);
+  if (!from) return { error: `No account found matching "${args.fromAccountName}".` };
+
+  const to = await resolveAccount(args.toAccountName);
+  if (!to) return { error: `No account found matching "${args.toAccountName}".` };
+
+  if (from.id === to.id) {
+    return { error: "fromAccountName and toAccountName resolved to the same account." };
+  }
+
+  const date = args.date ? new Date(args.date) : new Date();
+
+  const tx = await prisma.transaction.create({
+    data: {
+      date,
+      entryType: "TRANSFER",
+      amount: args.amount,
+      person: args.person ?? "SHARED",
+      particulars: args.note ?? null,
+      accountId: from.id,
+      toAccountId: to.id,
+    },
+    include: { account: true, toAccount: true },
+  });
+
+  const activity = await recordActivity({
+    entity: "TRANSACTION",
+    action: "CREATE",
+    entityId: tx.id,
+    summary: `Bes AI transferred ${formatMoney(toNumber(tx.amount))} from ${from.name} to ${to.name}`,
+    after: transactionSnapshot(tx),
+  });
+
+  return {
+    success: true,
+    transferred: {
+      date: dayjs(tx.date).format("YYYY-MM-DD"),
+      amount: toNumber(tx.amount),
+      from: from.name,
+      to: to.name,
+      person: tx.person,
+      note: tx.particulars,
+    },
+    activityId: activity.id,
+    undoHint: "This was logged via Settings > Recent Actions and can be undone there if it's wrong.",
+  };
+}
+
 async function toolResetAllTransactions(args: {
   passcode: string;
   startingAccountName?: string;
@@ -815,6 +899,8 @@ export async function executeTool(name: string, args: Record<string, unknown>) {
       return toolManageAccount(args as Parameters<typeof toolManageAccount>[0]);
     case "manage_category":
       return toolManageCategory(args as Parameters<typeof toolManageCategory>[0]);
+    case "transfer_between_accounts":
+      return toolTransferBetweenAccounts(args as Parameters<typeof toolTransferBetweenAccounts>[0]);
     case "reset_all_transactions":
       return toolResetAllTransactions(args as Parameters<typeof toolResetAllTransactions>[0]);
     default:
