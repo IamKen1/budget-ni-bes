@@ -112,6 +112,15 @@ model Transaction {
   @@index([accountId])
 }
 
+/// Remembers when a Bes AI provider (Groq/Gemini) last hit a quota/rate-limit error,
+/// so we stop wasting calls (and the other provider's tiny daily quota) retrying a
+/// provider that's already known to be dead for the rest of its reset window.
+model AiProviderStatus {
+  provider    String   @id
+  retryAfter  DateTime
+  updatedAt   DateTime @updatedAt
+}
+
 /// Records every create/update/delete so it can be shown and undone from Settings.
 model ActivityLog {
   id       String         @id @default(cuid())

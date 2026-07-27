@@ -3,6 +3,7 @@
 import dayjs from "dayjs";
 import { toolDefinitions, executeTool } from "@/lib/chat/tools";
 import { revalidatePath } from "next/cache";
+import { prisma } from "@/lib/prisma";
 
 export type ChatMessage = {
   role: "user" | "assistant";
@@ -159,18 +160,77 @@ async function callProviderWithRetry(provider: Provider, messages: unknown[], at
   throw lastErr;
 }
 
+/** Groq's error text gives an accurate wait time for its daily token cap, e.g.
+ * "Please try again in 1h15m51.552s." — parse it so we know exactly when to retry.
+ * Gemini's free-tier "requests per day" quota resets roughly every 24h, but the
+ * retryDelay it returns (e.g. "17s") is a generic per-minute hint that wildly
+ * understates a daily-quota wait, so that one's ignored in favor of a flat 24h. */
+function parseRetryAfterMs(provider: Provider, body: string): number {
+  if (provider === "groq") {
+    const match = body.match(/try again in\s*(?:(\d+)h)?(?:(\d+)m)?(?:(\d+(?:\.\d+)?)s)?/i);
+    if (match) {
+      const hours = Number(match[1] ?? 0);
+      const minutes = Number(match[2] ?? 0);
+      const seconds = Number(match[3] ?? 0);
+      const ms = ((hours * 60 + minutes) * 60 + seconds) * 1000;
+      if (ms > 0) return ms;
+    }
+  }
+  if (/per\s*day/i.test(body) || /PerDay/i.test(body)) {
+    return 24 * 60 * 60 * 1000;
+  }
+  return 5 * 60 * 1000;
+}
+
+/** Remembers a 429 so subsequent messages skip straight past this provider instead of
+ * re-hitting it (and, worse, wasting the other provider's tiny daily quota on a fallback
+ * attempt) every single time until the provider's own reset window has actually passed. */
+async function markProviderExhausted(provider: Provider, body: string) {
+  const retryAfter = new Date(Date.now() + parseRetryAfterMs(provider, body));
+  await prisma.aiProviderStatus.upsert({
+    where: { provider },
+    update: { retryAfter },
+    create: { provider, retryAfter },
+  });
+}
+
+async function getExhaustedProviders(): Promise<Map<Provider, Date>> {
+  const rows = await prisma.aiProviderStatus.findMany();
+  const now = new Date();
+  const exhausted = new Map<Provider, Date>();
+  for (const row of rows) {
+    if (row.retryAfter > now) exhausted.set(row.provider as Provider, row.retryAfter);
+  }
+  return exhausted;
+}
+
 /** Tries the given provider; if it fails and a fallback provider has a key configured,
  * switches to it — permanently for the rest of this conversation turn (via providerRef),
  * so the tool-calling loop below doesn't ping-pong back to a provider that just failed. */
-async function callAi(messages: unknown[], providerRef: { current: Provider }) {
+async function callAi(
+  messages: unknown[],
+  providerRef: { current: Provider },
+  knownExhausted: Map<Provider, Date>
+) {
   try {
     return await callProviderWithRetry(providerRef.current, messages);
   } catch (err) {
+    if (err instanceof AiProviderError && err.status === 429) {
+      await markProviderExhausted(err.provider, err.message);
+    }
     const fallback: Provider = providerRef.current === "groq" ? "gemini" : "groq";
-    if (!PROVIDERS[fallback].apiKey) throw err;
+    // Already known dead before this turn started — don't burn a request confirming it.
+    if (!PROVIDERS[fallback].apiKey || knownExhausted.has(fallback)) throw err;
     console.error(`Bes AI: ${providerRef.current} unavailable, falling back to ${fallback}:`, err);
     providerRef.current = fallback;
-    return await callProviderWithRetry(fallback, messages);
+    try {
+      return await callProviderWithRetry(fallback, messages);
+    } catch (fallbackErr) {
+      if (fallbackErr instanceof AiProviderError && fallbackErr.status === 429) {
+        await markProviderExhausted(fallbackErr.provider, fallbackErr.message);
+      }
+      throw fallbackErr;
+    }
   }
 }
 
@@ -189,15 +249,22 @@ function trimHistory(history: ChatMessage[]): ChatMessage[] {
 }
 
 export async function sendChatMessage(history: ChatMessage[]): Promise<string> {
-  const primaryProvider: Provider | null = PROVIDERS.groq.apiKey
-    ? "groq"
-    : PROVIDERS.gemini.apiKey
-    ? "gemini"
-    : null;
-  if (!primaryProvider) {
+  const configured: Provider[] = (["groq", "gemini"] as const).filter((p) => PROVIDERS[p].apiKey);
+  if (configured.length === 0) {
     return "Bes, wala pang AI API key na naka-set sa .env (GROQ_API_KEY o AI_STUDIO_KEY), so hindi pa ako makapag-reply. Pa-set muna niyan.";
   }
-  const providerRef = { current: primaryProvider };
+
+  // Both providers already known to be past their daily cap? Say so immediately —
+  // don't spend a single request confirming what we already know, especially since
+  // Gemini's free tier only allows 20 requests/day total.
+  const exhausted = await getExhaustedProviders();
+  const available = configured.filter((p) => !exhausted.has(p));
+  if (available.length === 0) {
+    const soonest = new Date(Math.min(...configured.map((p) => exhausted.get(p)!.getTime())));
+    return `Naubos muna yung AI message quota namin for today Bes — magre-reset ito around ${dayjs(soonest).format("h:mm A")}. Subukan ulit mamaya, sorry sa abala!`;
+  }
+
+  const providerRef = { current: available[0] };
 
   const messages: unknown[] = [
     { role: "system", content: SYSTEM_PROMPT },
@@ -212,7 +279,7 @@ export async function sendChatMessage(history: ChatMessage[]): Promise<string> {
 
   try {
     for (let i = 0; i < 6; i++) {
-      const data = await callAi(messages, providerRef);
+      const data = await callAi(messages, providerRef, exhausted);
       const choice = data.choices?.[0];
       const message = choice?.message;
       if (!message) throw new Error("No response from Groq.");
