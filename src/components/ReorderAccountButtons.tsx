@@ -1,6 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { moveAccount } from "@/lib/actions/accounts";
 
 export function ReorderAccountButtons({
@@ -13,10 +14,12 @@ export function ReorderAccountButtons({
   isLast: boolean;
 }) {
   const [isPending, startTransition] = useTransition();
+  const router = useRouter();
 
   function move(direction: "up" | "down") {
     startTransition(async () => {
       await moveAccount(accountId, direction);
+      router.refresh();
     });
   }
 
