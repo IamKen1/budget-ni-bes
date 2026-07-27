@@ -103,12 +103,6 @@ const PROVIDERS: ProviderConfig[] = [
     model: "llama-3.3-70b-versatile",
     apiKey: process.env.GROQ_API_KEY,
   },
-  // Cerebras is left out of the active chain for now: every model on this account
-  // currently 402s ("Payment required to access this resource") even though it's
-  // billed as free-tier — needs billing enabled on the Cerebras dashboard first.
-  // Re-add once that's sorted:
-  // { id: "cerebras", url: "https://api.cerebras.ai/v1/chat/completions", model: "gpt-oss-120b", apiKey: process.env.CEREBRAS_CLOUD_KEY },
-  //
   // OpenRouter meters free (":free") models separately per model, so two different
   // free models on the same account/key act as two more independent daily quotas.
   // Verified working with tool-calling as of this writing — OpenRouter's free model
