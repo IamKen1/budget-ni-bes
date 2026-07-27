@@ -103,24 +103,28 @@ const PROVIDERS: ProviderConfig[] = [
     model: "llama-3.3-70b-versatile",
     apiKey: process.env.GROQ_API_KEY,
   },
-  {
-    id: "cerebras",
-    url: "https://api.cerebras.ai/v1/chat/completions",
-    model: "llama-3.3-70b",
-    apiKey: process.env.CEREBRAS_CLOUD_KEY,
-  },
+  // Cerebras is left out of the active chain for now: every model on this account
+  // currently 402s ("Payment required to access this resource") even though it's
+  // billed as free-tier — needs billing enabled on the Cerebras dashboard first.
+  // Re-add once that's sorted:
+  // { id: "cerebras", url: "https://api.cerebras.ai/v1/chat/completions", model: "gpt-oss-120b", apiKey: process.env.CEREBRAS_CLOUD_KEY },
+  //
   // OpenRouter meters free (":free") models separately per model, so two different
   // free models on the same account/key act as two more independent daily quotas.
+  // Verified working with tool-calling as of this writing — OpenRouter's free model
+  // lineup churns, so if one 404s as "unavailable for free" later, check
+  // https://openrouter.ai/api/v1/models for a current ":free" model with
+  // supported_parameters including "tools" and swap it in.
   {
-    id: "openrouter-llama",
+    id: "openrouter-nemotron",
     url: "https://openrouter.ai/api/v1/chat/completions",
-    model: "meta-llama/llama-3.3-70b-instruct:free",
+    model: "nvidia/nemotron-3-super-120b-a12b:free",
     apiKey: process.env.OPENROUTER_KEY,
   },
   {
-    id: "openrouter-mistral",
+    id: "openrouter-gpt-oss",
     url: "https://openrouter.ai/api/v1/chat/completions",
-    model: "mistralai/mistral-small-3.2-24b-instruct:free",
+    model: "openai/gpt-oss-20b:free",
     apiKey: process.env.OPENROUTER_KEY,
   },
   {
