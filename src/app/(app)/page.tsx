@@ -18,6 +18,7 @@ import { ProgressBar } from "@/components/ProgressBar";
 import { MaskableAmount } from "@/components/MaskableAmount";
 import { BalanceVisibilityToggle } from "@/components/BalanceVisibilityToggle";
 import { SpecialDayBanner } from "@/components/SpecialDayBanner";
+import { RefreshButton } from "@/components/RefreshButton";
 import { DesktopDashboard } from "@/components/desktop/DesktopDashboard";
 
 export default async function DashboardPage() {
@@ -68,6 +69,7 @@ export default async function DashboardPage() {
           <h1 className="text-xl font-semibold tracking-tight">{period.label} Budget</h1>
         </div>
         <div className="flex items-center gap-2">
+          <RefreshButton />
           <Link
             href="/settings"
             aria-label="Settings"
