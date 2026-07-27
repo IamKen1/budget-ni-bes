@@ -1,5 +1,6 @@
 "use server";
 
+import dayjs from "dayjs";
 import { toolDefinitions, executeTool } from "@/lib/chat/tools";
 import { revalidatePath } from "next/cache";
 
@@ -60,6 +61,17 @@ Fixing and editing existing data (e.g. "mali yung nilagay mo", "i-update mo yung
 - Once confirmed and done, say what changed. Every edit/delete is also visible and reversible from Settings > Recent Actions, but don't rely on that instead of confirming — confirm first.
 - Adding a new transaction (log_transaction) does not need this confirm-first flow — proceed and confirm after, as described above.
 - If the user asks something that needs a number you don't have yet (e.g. "should I move money from BPI to cover this?"), ask a quick clarifying question rather than assuming — you're expected to have a real back-and-forth, not just narrate one-shot answers.
+
+Special days (today's real date is given to you in a separate message right after this one):
+- If today is the 12th of any month, it's their monthsary. If today is January 24, it's their wedding anniversary.
+- If you already know it's Jenna, greet her with a warm "Happy Monthsary!" or "Happy Wedding Anniversary!" (fresh wording each time, don't reuse the flattery lines verbatim) before getting into whatever she asked.
+- If you don't yet know whether it's Jenna or Kenneth, just say "Happy Monthsary, Bes!" or "Happy Anniversary, Bes!" — don't ask who it is just for this, and don't assume it's Jenna.
+- Only greet once per conversation, not on every message that same day. If it's not actually the 12th or Jan 24 per the date you were given, don't mention either occasion.
+
+Wiping everything and starting fresh (e.g. "iclear mo lahat at magstart tayo sa 5000 sa BPI"):
+- You can do this with reset_all_transactions — but it's irreversible, so never call it on the first message. First state plainly what will happen: every transaction gets deleted, every account and fund balance goes to zero, and then (if they gave a starting amount) that amount gets logged as the new balance for the account named. Wait for an explicit yes.
+- Only after they confirm, ask for the app passcode (the same one used to unlock the app / Settings > Danger Zone). Never call reset_all_transactions without a passcode the user typed in this conversation for this request — don't reuse one from earlier in the chat for something else, don't guess it.
+- If they only say "iclear mo lahat" with no starting amount, that's fine — just skip the starting balance step and confirm balances are now zero.
 
 Style:
 - Speak like a friendly, competent financial advisor — warm and approachable, not stiff or corporate, but not overly casual either. Default to English with light, natural Taglish sprinkled in (a word or short phrase here and there, like "sige", "okay lang", "ayan"), not full Tagalog sentences. Match whichever language mix the user leans into.
@@ -162,6 +174,20 @@ async function callAi(messages: unknown[], providerRef: { current: Provider }) {
   }
 }
 
+// Client sends the full running conversation on every turn (stateless API), and it only
+// grows. Past a point that's pure token waste — the model re-fetches real numbers from
+// tools every time anyway, it never relies on old chat text for data. Cap what we forward,
+// but always keep the opening exchange since that's where "Jenna or Kenneth?" gets
+// answered and the system prompt says never to ask that twice in one conversation.
+const MAX_HISTORY_MESSAGES = 20;
+
+function trimHistory(history: ChatMessage[]): ChatMessage[] {
+  if (history.length <= MAX_HISTORY_MESSAGES) return history;
+  const head = history.slice(0, 2);
+  const tail = history.slice(-(MAX_HISTORY_MESSAGES - head.length));
+  return [...head, ...tail];
+}
+
 export async function sendChatMessage(history: ChatMessage[]): Promise<string> {
   const primaryProvider: Provider | null = PROVIDERS.groq.apiKey
     ? "groq"
@@ -175,7 +201,11 @@ export async function sendChatMessage(history: ChatMessage[]): Promise<string> {
 
   const messages: unknown[] = [
     { role: "system", content: SYSTEM_PROMPT },
-    ...history.map((m) => ({ role: m.role, content: m.content })),
+    // Kept separate from SYSTEM_PROMPT (which is otherwise byte-identical across every
+    // call) so the static instructions stay eligible for provider-side prompt caching —
+    // only this line changes, and only once a day.
+    { role: "system", content: `Today's date is ${dayjs().format("YYYY-MM-DD (dddd)")}.` },
+    ...trimHistory(history).map((m) => ({ role: m.role, content: m.content })),
   ];
 
   let loggedTransaction = false;
@@ -220,7 +250,8 @@ export async function sendChatMessage(history: ChatMessage[]): Promise<string> {
         if (
           call.function.name === "log_transaction" ||
           call.function.name === "update_transaction" ||
-          call.function.name === "delete_transaction"
+          call.function.name === "delete_transaction" ||
+          call.function.name === "reset_all_transactions"
         ) {
           loggedTransaction = true;
         }

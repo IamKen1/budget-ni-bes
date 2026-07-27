@@ -6,7 +6,7 @@ import {
   getExpenseCategoriesWithProgress,
   monthRange,
 } from "@/lib/queries";
-import { recordActivity } from "@/lib/actions/activity";
+import { recordActivity, clearAllTransactions } from "@/lib/actions/activity";
 import { transactionSnapshot, accountSnapshot, categorySnapshot } from "@/lib/activity-snapshots";
 
 function toNumber(value: unknown): number {
@@ -249,6 +249,32 @@ export const toolDefinitions = [
           goalTarget: { type: "number", description: "Long-term savings goal amount. Only meaningful for SAVINGS categories." },
         },
         required: ["action", "name"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "reset_all_transactions",
+      description:
+        "DESTRUCTIVE — deletes every transaction so every account and fund balance resets to zero (accounts, categories, and their targets are kept as-is). Same action as Settings > Danger Zone > Clear all transactions, gated by the same app passcode. Optionally logs one starting INCOME transaction right after clearing, so an account begins at a chosen balance instead of zero. Never call this unless: (1) you've plainly stated what will happen — everything deleted, every balance to zero, then the new starting amount if one was given — and the user replied yes to that in their next message, AND (2) the user has given you the app passcode in this conversation for this request. Never guess, reuse, or ask for the passcode before the user has already agreed to proceed.",
+      parameters: {
+        type: "object",
+        properties: {
+          passcode: {
+            type: "string",
+            description: "The app passcode, given by the user in this conversation after they've confirmed they want to proceed.",
+          },
+          startingAccountName: {
+            type: "string",
+            description: "Optional: account to log a starting balance into right after clearing, e.g. 'BPI'.",
+          },
+          startingAmount: {
+            type: "number",
+            description: "Optional: peso amount to log as the starting balance for startingAccountName.",
+          },
+        },
+        required: ["passcode"],
       },
     },
   },
@@ -739,6 +765,28 @@ async function toolManageCategory(args: {
   return { success: true, category: updated.name, archived, activityId: activity.id };
 }
 
+async function toolResetAllTransactions(args: {
+  passcode: string;
+  startingAccountName?: string;
+  startingAmount?: number;
+}) {
+  const result = await clearAllTransactions(args.passcode, "DELETE");
+  if (result.error) return { error: result.error };
+
+  let startingBalanceLogged = null;
+  if (args.startingAccountName && args.startingAmount) {
+    startingBalanceLogged = await toolLogTransaction({
+      entryType: "INCOME",
+      amount: args.startingAmount,
+      accountName: args.startingAccountName,
+      person: "SHARED",
+      note: "Starting balance",
+    });
+  }
+
+  return { success: true, cleared: true, startingBalanceLogged };
+}
+
 export async function executeTool(name: string, args: Record<string, unknown>) {
   switch (name) {
     case "get_balances":
@@ -767,6 +815,8 @@ export async function executeTool(name: string, args: Record<string, unknown>) {
       return toolManageAccount(args as Parameters<typeof toolManageAccount>[0]);
     case "manage_category":
       return toolManageCategory(args as Parameters<typeof toolManageCategory>[0]);
+    case "reset_all_transactions":
+      return toolResetAllTransactions(args as Parameters<typeof toolResetAllTransactions>[0]);
     default:
       return { error: `Unknown tool: ${name}` };
   }

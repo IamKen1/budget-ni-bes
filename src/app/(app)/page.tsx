@@ -17,6 +17,7 @@ import { TransactionRow } from "@/components/TransactionRow";
 import { ProgressBar } from "@/components/ProgressBar";
 import { MaskableAmount } from "@/components/MaskableAmount";
 import { BalanceVisibilityToggle } from "@/components/BalanceVisibilityToggle";
+import { SpecialDayBanner } from "@/components/SpecialDayBanner";
 import { DesktopDashboard } from "@/components/desktop/DesktopDashboard";
 
 export default async function DashboardPage() {
@@ -101,6 +102,8 @@ export default async function DashboardPage() {
           </form>
         </div>
       </header>
+
+      <SpecialDayBanner />
 
       <div className="rounded-3xl bg-gradient-to-br from-emerald-600 to-emerald-700 p-6 text-white shadow-lg shadow-emerald-600/20">
         <div className="flex items-center justify-between">
