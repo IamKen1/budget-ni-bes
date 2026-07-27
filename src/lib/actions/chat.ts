@@ -84,46 +84,74 @@ Style:
 - Reply in plain conversational text only. Never output HTML, XML, or markup-style tags (e.g. no <result>, <div>, or similar) anywhere in your response — not even to structure the answer.
 - Whenever you list more than one item (transactions to pick from, a category-by-category allocation, several tips), put each item on its own line — a real newline between them, numbered or with a short dash — never run them together as one long sentence separated by commas. A wall of text is hard to read on a phone; a short list is not.`;
 
-// Two OpenAI-compatible providers, tried in order. Groq is primary (fast, but a low
-// daily free-tier token cap we kept hitting); Gemini via Google AI Studio's OpenAI-
-// compatible endpoint is the fallback so the family never sees a dead chat mid-day.
-// Both speak the same request/response shape, so this stays provider-agnostic.
-type Provider = "groq" | "gemini";
+// An ordered chain of OpenAI-compatible providers/models, all free tier, tried in
+// order until one answers. More entries = more daily runway for zero cost, since each
+// is its own separately-metered quota. Order is fastest/most-generous first, tiniest
+// quota (Gemini, 20 req/day) last so it's only ever used as a last resort.
+type ProviderConfig = {
+  id: string;
+  url: string;
+  model: string;
+  apiKey: string | undefined;
+  headers?: Record<string, string>;
+};
 
-const PROVIDERS: Record<Provider, { url: string; model: string; apiKey: string | undefined }> = {
-  groq: {
+const PROVIDERS: ProviderConfig[] = [
+  {
+    id: "groq",
     url: "https://api.groq.com/openai/v1/chat/completions",
     model: "llama-3.3-70b-versatile",
     apiKey: process.env.GROQ_API_KEY,
   },
-  gemini: {
+  {
+    id: "cerebras",
+    url: "https://api.cerebras.ai/v1/chat/completions",
+    model: "llama-3.3-70b",
+    apiKey: process.env.CEREBRAS_CLOUD_KEY,
+  },
+  // OpenRouter meters free (":free") models separately per model, so two different
+  // free models on the same account/key act as two more independent daily quotas.
+  {
+    id: "openrouter-llama",
+    url: "https://openrouter.ai/api/v1/chat/completions",
+    model: "meta-llama/llama-3.3-70b-instruct:free",
+    apiKey: process.env.OPENROUTER_KEY,
+  },
+  {
+    id: "openrouter-mistral",
+    url: "https://openrouter.ai/api/v1/chat/completions",
+    model: "mistralai/mistral-small-3.2-24b-instruct:free",
+    apiKey: process.env.OPENROUTER_KEY,
+  },
+  {
+    id: "gemini",
     url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
     // "-latest" alias so this doesn't break again as dated model versions age out.
     model: "gemini-flash-latest",
     apiKey: process.env.AI_STUDIO_KEY,
   },
-};
+];
 
 class AiProviderError extends Error {
   status: number;
-  provider: Provider;
-  constructor(provider: Provider, status: number, body: string) {
-    super(`${provider} API error ${status}: ${body}`);
+  providerId: string;
+  constructor(providerId: string, status: number, body: string) {
+    super(`${providerId} API error ${status}: ${body}`);
     this.status = status;
-    this.provider = provider;
+    this.providerId = providerId;
   }
 }
 
-async function callProvider(provider: Provider, messages: unknown[]) {
-  const config = PROVIDERS[provider];
-  const res = await fetch(config.url, {
+async function callProvider(provider: ProviderConfig, messages: unknown[]) {
+  const res = await fetch(provider.url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${config.apiKey}`,
+      Authorization: `Bearer ${provider.apiKey}`,
+      ...provider.headers,
     },
     body: JSON.stringify({
-      model: config.model,
+      model: provider.model,
       messages,
       tools: toolDefinitions,
       tool_choice: "auto",
@@ -133,7 +161,7 @@ async function callProvider(provider: Provider, messages: unknown[]) {
 
   if (!res.ok) {
     const text = await res.text();
-    throw new AiProviderError(provider, res.status, text);
+    throw new AiProviderError(provider.id, res.status, text);
   }
 
   return res.json();
@@ -145,8 +173,8 @@ async function callProvider(provider: Provider, messages: unknown[]) {
  * it's usually just a stochastic formatting slip and a plain retry gets a clean call back.
  * A 429 (rate limit) is different — retrying immediately can't fix it, just burns more of
  * the quota and returns the same error, so that fails fast instead (to let the caller
- * fall back to the other provider rather than waste retries on a dead one). */
-async function callProviderWithRetry(provider: Provider, messages: unknown[], attempts = 3) {
+ * move on to the next provider rather than waste retries on a dead one). */
+async function callProviderWithRetry(provider: ProviderConfig, messages: unknown[], attempts = 3) {
   let lastErr: unknown;
   for (let i = 0; i < attempts; i++) {
     try {
@@ -154,7 +182,7 @@ async function callProviderWithRetry(provider: Provider, messages: unknown[], at
     } catch (err) {
       lastErr = err;
       if (err instanceof AiProviderError && err.status === 429) throw err;
-      console.error(`Bes AI: ${provider} call failed (attempt ${i + 1}/${attempts}):`, err);
+      console.error(`Bes AI: ${provider.id} call failed (attempt ${i + 1}/${attempts}):`, err);
     }
   }
   throw lastErr;
@@ -162,11 +190,12 @@ async function callProviderWithRetry(provider: Provider, messages: unknown[], at
 
 /** Groq's error text gives an accurate wait time for its daily token cap, e.g.
  * "Please try again in 1h15m51.552s." — parse it so we know exactly when to retry.
- * Gemini's free-tier "requests per day" quota resets roughly every 24h, but the
- * retryDelay it returns (e.g. "17s") is a generic per-minute hint that wildly
- * understates a daily-quota wait, so that one's ignored in favor of a flat 24h. */
-function parseRetryAfterMs(provider: Provider, body: string): number {
-  if (provider === "groq") {
+ * Free-tier "requests per day" quotas (Gemini, OpenRouter free models) reset roughly
+ * every 24h, but any retryDelay they return (e.g. Gemini's "17s") is a generic
+ * per-minute hint that wildly understates a daily-quota wait, so that's ignored in
+ * favor of a flat 24h whenever the error body itself says the limit is per-day. */
+function parseRetryAfterMs(providerId: string, body: string): number {
+  if (providerId === "groq") {
     const match = body.match(/try again in\s*(?:(\d+)h)?(?:(\d+)m)?(?:(\d+(?:\.\d+)?)s)?/i);
     if (match) {
       const hours = Number(match[1] ?? 0);
@@ -183,55 +212,55 @@ function parseRetryAfterMs(provider: Provider, body: string): number {
 }
 
 /** Remembers a 429 so subsequent messages skip straight past this provider instead of
- * re-hitting it (and, worse, wasting the other provider's tiny daily quota on a fallback
- * attempt) every single time until the provider's own reset window has actually passed. */
-async function markProviderExhausted(provider: Provider, body: string) {
-  const retryAfter = new Date(Date.now() + parseRetryAfterMs(provider, body));
+ * re-hitting it (and wasting other providers' tiny daily quotas on a doomed retry)
+ * every single time until this provider's own reset window has actually passed. */
+async function markProviderExhausted(providerId: string, body: string) {
+  const retryAfter = new Date(Date.now() + parseRetryAfterMs(providerId, body));
   await prisma.aiProviderStatus.upsert({
-    where: { provider },
+    where: { provider: providerId },
     update: { retryAfter },
-    create: { provider, retryAfter },
+    create: { provider: providerId, retryAfter },
   });
 }
 
-async function getExhaustedProviders(): Promise<Map<Provider, Date>> {
+async function getExhaustedProviders(): Promise<Map<string, Date>> {
   const rows = await prisma.aiProviderStatus.findMany();
   const now = new Date();
-  const exhausted = new Map<Provider, Date>();
+  const exhausted = new Map<string, Date>();
   for (const row of rows) {
-    if (row.retryAfter > now) exhausted.set(row.provider as Provider, row.retryAfter);
+    if (row.retryAfter > now) exhausted.set(row.provider, row.retryAfter);
   }
   return exhausted;
 }
 
-/** Tries the given provider; if it fails and a fallback provider has a key configured,
- * switches to it — permanently for the rest of this conversation turn (via providerRef),
- * so the tool-calling loop below doesn't ping-pong back to a provider that just failed. */
+/** Walks the provider chain starting from wherever the last successful (or last-tried)
+ * call left off, skipping anything already known-exhausted, and sticks with the first
+ * one that answers for the rest of this turn (via chainPositionRef) — so a 6-iteration
+ * tool-calling loop doesn't re-try providers that already failed earlier in the turn. */
 async function callAi(
   messages: unknown[],
-  providerRef: { current: Provider },
-  knownExhausted: Map<Provider, Date>
+  candidates: ProviderConfig[],
+  chainPositionRef: { current: number },
+  knownExhausted: Map<string, Date>
 ) {
-  try {
-    return await callProviderWithRetry(providerRef.current, messages);
-  } catch (err) {
-    if (err instanceof AiProviderError && err.status === 429) {
-      await markProviderExhausted(err.provider, err.message);
-    }
-    const fallback: Provider = providerRef.current === "groq" ? "gemini" : "groq";
-    // Already known dead before this turn started — don't burn a request confirming it.
-    if (!PROVIDERS[fallback].apiKey || knownExhausted.has(fallback)) throw err;
-    console.error(`Bes AI: ${providerRef.current} unavailable, falling back to ${fallback}:`, err);
-    providerRef.current = fallback;
+  let lastErr: unknown;
+  for (let i = chainPositionRef.current; i < candidates.length; i++) {
+    const provider = candidates[i];
+    if (knownExhausted.has(provider.id)) continue;
     try {
-      return await callProviderWithRetry(fallback, messages);
-    } catch (fallbackErr) {
-      if (fallbackErr instanceof AiProviderError && fallbackErr.status === 429) {
-        await markProviderExhausted(fallbackErr.provider, fallbackErr.message);
+      const result = await callProviderWithRetry(provider, messages);
+      chainPositionRef.current = i;
+      return result;
+    } catch (err) {
+      lastErr = err;
+      if (err instanceof AiProviderError && err.status === 429) {
+        await markProviderExhausted(provider.id, err.message);
+        knownExhausted.set(provider.id, new Date(Date.now() + parseRetryAfterMs(provider.id, err.message)));
       }
-      throw fallbackErr;
+      console.error(`Bes AI: ${provider.id} unavailable, trying next:`, err);
     }
   }
+  throw lastErr;
 }
 
 // Client sends the full running conversation on every turn (stateless API), and it only
@@ -249,22 +278,23 @@ function trimHistory(history: ChatMessage[]): ChatMessage[] {
 }
 
 export async function sendChatMessage(history: ChatMessage[]): Promise<string> {
-  const configured: Provider[] = (["groq", "gemini"] as const).filter((p) => PROVIDERS[p].apiKey);
+  const configured = PROVIDERS.filter((p) => p.apiKey);
   if (configured.length === 0) {
-    return "Bes, wala pang AI API key na naka-set sa .env (GROQ_API_KEY o AI_STUDIO_KEY), so hindi pa ako makapag-reply. Pa-set muna niyan.";
+    return "Bes, wala pang AI API key na naka-set sa .env (hal. GROQ_API_KEY), so hindi pa ako makapag-reply. Pa-set muna niyan.";
   }
 
-  // Both providers already known to be past their daily cap? Say so immediately —
-  // don't spend a single request confirming what we already know, especially since
-  // Gemini's free tier only allows 20 requests/day total.
+  // All configured providers already known to be past their daily cap? Say so
+  // immediately — don't spend a single request confirming what we already know,
+  // especially since some of these (Gemini, OpenRouter free models) only allow a
+  // couple dozen requests/day total.
   const exhausted = await getExhaustedProviders();
-  const available = configured.filter((p) => !exhausted.has(p));
+  const available = configured.filter((p) => !exhausted.has(p.id));
   if (available.length === 0) {
-    const soonest = new Date(Math.min(...configured.map((p) => exhausted.get(p)!.getTime())));
+    const soonest = new Date(Math.min(...configured.map((p) => exhausted.get(p.id)!.getTime())));
     return `Naubos muna yung AI message quota namin for today Bes — magre-reset ito around ${dayjs(soonest).format("h:mm A")}. Subukan ulit mamaya, sorry sa abala!`;
   }
 
-  const providerRef = { current: available[0] };
+  const chainPositionRef = { current: PROVIDERS.indexOf(available[0]) };
 
   const messages: unknown[] = [
     { role: "system", content: SYSTEM_PROMPT },
@@ -279,10 +309,10 @@ export async function sendChatMessage(history: ChatMessage[]): Promise<string> {
 
   try {
     for (let i = 0; i < 6; i++) {
-      const data = await callAi(messages, providerRef, exhausted);
+      const data = await callAi(messages, PROVIDERS, chainPositionRef, exhausted);
       const choice = data.choices?.[0];
       const message = choice?.message;
-      if (!message) throw new Error("No response from Groq.");
+      if (!message) throw new Error("No response from AI provider.");
 
       const toolCalls = message.tool_calls as
         | { id: string; function: { name: string; arguments: string } }[]
