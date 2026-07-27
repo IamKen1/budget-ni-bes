@@ -5,6 +5,7 @@ import { formatMoney } from "@/lib/format";
 import { AddAccountForm } from "@/components/AddAccountForm";
 import { ArchiveToggleButton } from "@/components/ArchiveToggleButton";
 import { EditAccountTarget } from "@/components/EditAccountTarget";
+import { EditAccountName } from "@/components/EditAccountName";
 import { toggleArchiveAccount } from "@/lib/actions/accounts";
 import { ProgressBar } from "@/components/ProgressBar";
 
@@ -36,7 +37,10 @@ export default async function AccountsPage() {
             <div key={account.id} className={account.archived ? "opacity-50" : ""}>
               <div className="flex items-center justify-between gap-3 rounded-xl py-1">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{account.name}</p>
+                  <div className="flex items-center gap-1">
+                    <p className="truncate text-sm font-medium">{account.name}</p>
+                    {!account.archived && <EditAccountName accountId={account.id} name={account.name} />}
+                  </div>
                   <p className="text-xs text-zinc-400">{accountTypeLabel[account.type]}</p>
                 </div>
                 {!account.archived && (

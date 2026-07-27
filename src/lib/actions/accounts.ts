@@ -57,6 +57,47 @@ export async function toggleArchiveAccount(id: string, archived: boolean) {
   return { activityId: activity.id };
 }
 
+const nameSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().trim().min(1).max(60),
+});
+
+export async function updateAccountName(formData: FormData) {
+  const parsed = nameSchema.parse({
+    id: formData.get("id"),
+    name: formData.get("name"),
+  });
+
+  const before = await prisma.account.findUnique({ where: { id: parsed.id } });
+  if (!before) return { error: "Account not found." };
+
+  const existing = await prisma.account.findUnique({ where: { name: parsed.name } });
+  if (existing && existing.id !== parsed.id) {
+    return { error: `An account named "${parsed.name}" already exists.` };
+  }
+
+  const account = await prisma.account.update({
+    where: { id: parsed.id },
+    data: { name: parsed.name },
+  });
+
+  const activity = await recordActivity({
+    entity: "ACCOUNT",
+    action: "UPDATE",
+    entityId: parsed.id,
+    summary: `Renamed account "${before.name}" to "${account.name}"`,
+    before: accountSnapshot(before),
+    after: accountSnapshot(account),
+  });
+
+  revalidatePath("/accounts");
+  revalidatePath("/accounts/history");
+  revalidatePath("/transactions");
+  revalidatePath("/");
+
+  return { activityId: activity.id };
+}
+
 const targetSchema = z.object({
   id: z.string().min(1),
   monthlyTarget: z.coerce.number().min(0),
