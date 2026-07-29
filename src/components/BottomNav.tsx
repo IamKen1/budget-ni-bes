@@ -68,6 +68,24 @@ function TagIcon({ active }: { active: boolean }) {
   );
 }
 
+function CalendarIcon({ active }: { active: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6">
+      <rect
+        x="4"
+        y="5.5"
+        width="16"
+        height="15"
+        rx="2"
+        stroke="currentColor"
+        strokeWidth={active ? 2.2 : 1.8}
+      />
+      <path d="M4 10h16M8 3.5v3M16 3.5v3" stroke="currentColor" strokeWidth={active ? 2.2 : 1.8} strokeLinecap="round" />
+      <path d="M8.5 14h1.5M8.5 17h1.5M12.25 14h1.5M12.25 17h1.5M16 14h1.5" stroke="currentColor" strokeWidth={active ? 2.2 : 1.8} strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function ChatIcon({ active }: { active: boolean }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6">
@@ -103,6 +121,7 @@ const leftItems: { href: string; label: string; icon: (active: boolean) => React
 
 const rightItems: { href: string; label: string; icon: (active: boolean) => ReactNode }[] = [
   { href: "/categories", label: "Categories", icon: (a) => <TagIcon active={a} /> },
+  { href: "/loans", label: "Loans", icon: (a) => <CalendarIcon active={a} /> },
 ];
 
 export function BottomNav() {

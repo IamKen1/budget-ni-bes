@@ -9,9 +9,10 @@ import {
   transactionSnapshot,
   accountSnapshot,
   categorySnapshot,
+  loanPaymentSnapshot,
 } from "@/lib/activity-snapshots";
 
-type Entity = "TRANSACTION" | "ACCOUNT" | "CATEGORY";
+type Entity = "TRANSACTION" | "ACCOUNT" | "CATEGORY" | "LOAN_PAYMENT";
 type Action = "CREATE" | "UPDATE" | "DELETE";
 
 export async function recordActivity(params: {
@@ -118,6 +119,32 @@ async function undoCategory(log: { entityId: string; action: Action; before: unk
   }
 }
 
+async function undoLoanPayment(log: { entityId: string; action: Action; before: unknown }) {
+  if (log.action === "CREATE") {
+    await prisma.loanPayment.delete({ where: { id: log.entityId } });
+    return;
+  }
+  const d = log.before as ReturnType<typeof loanPaymentSnapshot>;
+  const data = {
+    payee: d.payee,
+    dueDate: new Date(d.dueDate),
+    amount: d.amount,
+    particulars: d.particulars,
+    remainingBalance: d.remainingBalance,
+    person: d.person as never,
+    paid: d.paid,
+    sortOrder: d.sortOrder,
+    accountId: d.accountId,
+    categoryId: d.categoryId,
+    transactionId: d.transactionId,
+  };
+  if (log.action === "DELETE") {
+    await prisma.loanPayment.create({ data: { id: log.entityId, ...data } });
+  } else {
+    await prisma.loanPayment.update({ where: { id: log.entityId }, data });
+  }
+}
+
 export async function undoActivity(id: string): Promise<{ success?: true; error?: string }> {
   const log = await prisma.activityLog.findUnique({ where: { id } });
   if (!log) return { error: "Action not found." };
@@ -128,8 +155,10 @@ export async function undoActivity(id: string): Promise<{ success?: true; error?
       await undoTransaction(log);
     } else if (log.entity === "ACCOUNT") {
       await undoAccount(log);
-    } else {
+    } else if (log.entity === "CATEGORY") {
       await undoCategory(log);
+    } else {
+      await undoLoanPayment(log);
     }
   } catch {
     return { error: "Could not undo — related data may have changed since." };
@@ -141,6 +170,7 @@ export async function undoActivity(id: string): Promise<{ success?: true; error?
   revalidatePath("/transactions");
   revalidatePath("/accounts");
   revalidatePath("/categories");
+  revalidatePath("/loans");
   revalidatePath("/settings");
 
   return { success: true };

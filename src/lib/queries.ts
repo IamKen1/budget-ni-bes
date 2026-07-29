@@ -1,6 +1,6 @@
 import dayjs from "dayjs";
 import { prisma } from "@/lib/prisma";
-import type { Account, Category, Person, Transaction } from "@/generated/prisma/client";
+import type { Account, Category, LoanPayment, Person, Transaction } from "@/generated/prisma/client";
 
 function toNumber(value: unknown): number {
   return typeof value === "object" && value !== null && "toNumber" in value
@@ -344,4 +344,61 @@ export async function getAllAccounts(): Promise<SerializedAccount[]> {
 export async function getAllCategories(): Promise<SerializedCategory[]> {
   const categories = await prisma.category.findMany({ orderBy: { sortOrder: "asc" } });
   return categories.map(serializeCategory);
+}
+
+export type SerializedLoanPayment = Omit<LoanPayment, "amount" | "remainingBalance"> & {
+  amount: number;
+  remainingBalance: number | null;
+  account: SerializedAccount;
+  category: SerializedCategory | null;
+};
+
+function serializeLoanPayment<
+  T extends LoanPayment & { account: Account; category: Category | null }
+>(loan: T): SerializedLoanPayment {
+  return {
+    ...loan,
+    amount: toNumber(loan.amount),
+    remainingBalance: loan.remainingBalance === null ? null : toNumber(loan.remainingBalance),
+    account: serializeAccount(loan.account),
+    category: loan.category ? serializeCategory(loan.category) : null,
+  };
+}
+
+export type LoanPaymentMonthGroup = {
+  monthKey: string;
+  label: string;
+  total: number;
+  remainingBalance: number;
+  payments: SerializedLoanPayment[];
+};
+
+/** All upcoming loan/bill installments, grouped by due-date month — newest month first (matches the "Upcoming Payments" schedule). */
+export async function getLoanPaymentsByMonth(): Promise<LoanPaymentMonthGroup[]> {
+  const loans = await prisma.loanPayment.findMany({
+    orderBy: [{ dueDate: "asc" }, { sortOrder: "asc" }],
+    include: { account: true, category: true },
+  });
+
+  const groups = new Map<string, LoanPaymentMonthGroup>();
+  for (const loan of loans) {
+    const serialized = serializeLoanPayment(loan);
+    const monthKey = dayjs(loan.dueDate).format("YYYY-MM");
+    let group = groups.get(monthKey);
+    if (!group) {
+      group = {
+        monthKey,
+        label: dayjs(loan.dueDate).format("MMMM YYYY"),
+        total: 0,
+        remainingBalance: 0,
+        payments: [],
+      };
+      groups.set(monthKey, group);
+    }
+    group.total += serialized.amount;
+    group.remainingBalance += serialized.remainingBalance ?? 0;
+    group.payments.push(serialized);
+  }
+
+  return Array.from(groups.values());
 }

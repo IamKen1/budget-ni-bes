@@ -19,3 +19,9 @@ export const personLabel: Record<Person, string> = {
   KENNETH: "Kenneth",
   SHARED: "Shared",
 };
+
+export const personInitial: Record<Person, string> = {
+  JENNA: "J",
+  KENNETH: "K",
+  SHARED: "S",
+};

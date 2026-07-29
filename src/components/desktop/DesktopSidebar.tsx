@@ -4,6 +4,7 @@ import Link from "next/link";
 import type {
   SerializedAccount,
   CategoryProgress,
+  LoanPaymentMonthGroup,
 } from "@/lib/queries";
 import { formatMoney } from "@/lib/format";
 import { accountTypeLabel } from "@/lib/labels";
@@ -31,6 +32,7 @@ export function DesktopSidebar({
   accounts,
   expenseCategories,
   savingsCategories,
+  upcomingLoanGroup,
 }: {
   cutoff: string;
   periodLabel: string;
@@ -41,6 +43,7 @@ export function DesktopSidebar({
   accounts: (SerializedAccount & { balance: number })[];
   expenseCategories: CategoryProgress[];
   savingsCategories: CategoryProgress[];
+  upcomingLoanGroup: LoanPaymentMonthGroup | null;
 }) {
   const { filter, setFilter } = useDesktopFilter();
   const { visible } = useBalanceVisibility();
@@ -168,6 +171,26 @@ export function DesktopSidebar({
           </div>
         </details>
       </section>
+
+      {upcomingLoanGroup && (
+        <section className="mt-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+              Upcoming Payments
+            </h2>
+            <Link href="/loans" className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+              View all
+            </Link>
+          </div>
+          <Link
+            href="/loans"
+            className="mt-1.5 flex items-center justify-between rounded-lg px-1.5 py-1 text-xs transition hover:bg-zinc-50 dark:hover:bg-zinc-900"
+          >
+            <span className="text-zinc-600 dark:text-zinc-300">{upcomingLoanGroup.label}</span>
+            <span className="font-medium">{money(upcomingLoanGroup.total)}</span>
+          </Link>
+        </section>
+      )}
 
       <section className="mt-3">
         <h2 className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">

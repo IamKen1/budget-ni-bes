@@ -2,6 +2,7 @@ import type {
   SerializedAccount,
   SerializedTransaction,
   CategoryProgress,
+  LoanPaymentMonthGroup,
 } from "@/lib/queries";
 import { DesktopSidebar } from "@/components/desktop/DesktopSidebar";
 import { QuickAddTransactionForm } from "@/components/desktop/QuickAddTransactionForm";
@@ -20,6 +21,7 @@ export function DesktopDashboard({
   expenseCategories,
   savingsCategories,
   transactions,
+  upcomingLoanGroup,
 }: {
   cutoff: string;
   periodLabel: string;
@@ -31,6 +33,7 @@ export function DesktopDashboard({
   expenseCategories: CategoryProgress[];
   savingsCategories: CategoryProgress[];
   transactions: SerializedTransaction[];
+  upcomingLoanGroup: LoanPaymentMonthGroup | null;
 }) {
   return (
     <DesktopFilterProvider>
@@ -45,6 +48,7 @@ export function DesktopDashboard({
           accounts={accounts}
           expenseCategories={expenseCategories}
           savingsCategories={savingsCategories}
+          upcomingLoanGroup={upcomingLoanGroup}
         />
         <main className="flex min-w-0 flex-1 flex-col bg-zinc-50 dark:bg-zinc-900/40">
           <div className="px-6 pt-6">

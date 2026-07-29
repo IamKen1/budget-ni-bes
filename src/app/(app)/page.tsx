@@ -7,6 +7,7 @@ import {
   getPersonSpendBreakdown,
   getRecentTransactions,
   getAllTransactions,
+  getLoanPaymentsByMonth,
   monthRange,
   currentCutoffLabel,
 } from "@/lib/queries";
@@ -27,7 +28,7 @@ export default async function DashboardPage() {
   // cutoff's spend against a full-month target understated how much budget
   // was actually left. The cutoff label below is still shown for context.
   const period = monthRange();
-  const [accounts, expenseCategories, savingsCategories, summary, personSpend, recent, allTransactions] =
+  const [accounts, expenseCategories, savingsCategories, summary, personSpend, recent, allTransactions, loanGroups] =
     await Promise.all([
       getAccountsWithBalances(),
       getExpenseCategoriesWithProgress(period),
@@ -36,7 +37,11 @@ export default async function DashboardPage() {
       getPersonSpendBreakdown(period),
       getRecentTransactions(8),
       getAllTransactions(),
+      getLoanPaymentsByMonth(),
     ]);
+
+  const upcomingLoanGroup = loanGroups.find((g) => !g.payments.every((p) => p.paid)) ?? loanGroups[0];
+  const upcomingLoanCount = upcomingLoanGroup?.payments.filter((p) => !p.paid).length ?? 0;
 
   const totalBalance = accounts.reduce((sum, a) => sum + a.balance, 0);
   const totalExpenseTarget = expenseCategories.reduce((sum, c) => sum + c.monthlyTarget, 0);
@@ -58,6 +63,7 @@ export default async function DashboardPage() {
         expenseCategories={expenseCategories}
         savingsCategories={savingsCategories}
         transactions={allTransactions}
+        upcomingLoanGroup={upcomingLoanGroup ?? null}
       />
     </div>
     <div className="flex flex-col gap-6 pb-4 lg:hidden">
@@ -186,6 +192,31 @@ export default async function DashboardPage() {
           ))}
         </div>
       </section>
+
+      {upcomingLoanGroup && (
+        <section>
+          <div className="flex items-center justify-between px-1">
+            <h2 className="text-sm font-semibold text-zinc-500 dark:text-zinc-400">Upcoming Payments</h2>
+            <Link href="/loans" className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
+              View all
+            </Link>
+          </div>
+          <Link
+            href="/loans"
+            className="mt-2 block rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition active:scale-[0.99] dark:border-zinc-800 dark:bg-zinc-900"
+          >
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium">{upcomingLoanGroup.label}</p>
+              <p className="text-sm font-semibold"><MaskableAmount value={upcomingLoanGroup.total} /></p>
+            </div>
+            <p className="mt-1 text-xs text-zinc-400">
+              {upcomingLoanCount > 0
+                ? `${upcomingLoanCount} payment${upcomingLoanCount === 1 ? "" : "s"} due`
+                : "All payments logged for this month"}
+            </p>
+          </Link>
+        </section>
+      )}
 
       {totalPersonSpend > 0 && (
         <section>

@@ -42,6 +42,34 @@ export function accountSnapshot(a: {
   };
 }
 
+export function loanPaymentSnapshot(l: {
+  payee: string;
+  dueDate: Date;
+  amount: unknown;
+  particulars: string | null;
+  remainingBalance: unknown;
+  person: string;
+  paid: boolean;
+  sortOrder: number;
+  accountId: string;
+  categoryId: string | null;
+  transactionId: string | null;
+}) {
+  return {
+    payee: l.payee,
+    dueDate: l.dueDate.toISOString(),
+    amount: toNumber(l.amount),
+    particulars: l.particulars,
+    remainingBalance: l.remainingBalance === null ? null : toNumber(l.remainingBalance),
+    person: l.person,
+    paid: l.paid,
+    sortOrder: l.sortOrder,
+    accountId: l.accountId,
+    categoryId: l.categoryId,
+    transactionId: l.transactionId,
+  };
+}
+
 export function categorySnapshot(c: {
   name: string;
   kind: string;
