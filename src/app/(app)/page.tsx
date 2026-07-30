@@ -80,43 +80,18 @@ export default async function DashboardPage({
       />
     </div>
     <div className="flex flex-col gap-6 pb-4 lg:hidden">
-      <header className="flex items-center justify-between pt-2">
-        <div>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            Hi, Bes 👋 · {cutoff} cutoff
-          </p>
-          <h1 className="text-xl font-semibold tracking-tight">{period.label} Budget</h1>
+      <header className="flex items-center justify-between gap-2 pt-2">
+        <div className="min-w-0">
+          <h1 className="truncate text-lg font-semibold tracking-tight">{period.label} Budget</h1>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="flex gap-0.5 rounded-full bg-zinc-100 p-0.5 dark:bg-zinc-900">
-            <Link
-              href="/?view=cutoff"
-              className={`rounded-full px-2.5 py-1.5 text-xs font-medium transition ${
-                view === "cutoff"
-                  ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-800 dark:text-zinc-100"
-                  : "text-zinc-500 dark:text-zinc-400"
-              }`}
-            >
-              Cutoff
-            </Link>
-            <Link
-              href="/?view=month"
-              className={`rounded-full px-2.5 py-1.5 text-xs font-medium transition ${
-                view === "month"
-                  ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-800 dark:text-zinc-100"
-                  : "text-zinc-500 dark:text-zinc-400"
-              }`}
-            >
-              Month
-            </Link>
-          </div>
+        <div className="flex shrink-0 items-center gap-1.5">
           <RefreshButton />
           <Link
             href="/settings"
             aria-label="Settings"
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 transition active:scale-95 dark:bg-zinc-900 dark:text-zinc-400"
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 transition active:scale-95 dark:bg-zinc-900 dark:text-zinc-400"
           >
-            <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
+            <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4">
               <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth={1.8} />
               <path
                 d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.32 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"
@@ -130,9 +105,9 @@ export default async function DashboardPage({
             <button
               type="submit"
               aria-label="Log out"
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 transition active:scale-95 dark:bg-zinc-900 dark:text-zinc-400"
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 transition active:scale-95 dark:bg-zinc-900 dark:text-zinc-400"
             >
-              <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
+              <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4">
                 <path
                   d="M9 21H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3M16 17l5-5-5-5M21 12H9"
                   stroke="currentColor"
@@ -148,15 +123,35 @@ export default async function DashboardPage({
 
       <SpecialDayBanner />
 
-      <div className="rounded-3xl bg-gradient-to-br from-emerald-600 to-emerald-700 p-6 text-white shadow-lg shadow-emerald-600/20">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-medium text-emerald-100">Total Balance</p>
-          <BalanceVisibilityToggle />
+      <div className="rounded-3xl bg-gradient-to-br from-emerald-600 to-emerald-700 p-4 text-white shadow-lg shadow-emerald-600/20">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-medium text-emerald-100">Total Balance</p>
+          <div className="flex items-center gap-2">
+            <div className="flex gap-0.5 rounded-full bg-white/15 p-0.5">
+              <Link
+                href="/?view=cutoff"
+                className={`rounded-full px-2.5 py-1 text-xs font-medium transition ${
+                  view === "cutoff" ? "bg-white text-emerald-700" : "text-emerald-100"
+                }`}
+              >
+                Cutoff
+              </Link>
+              <Link
+                href="/?view=month"
+                className={`rounded-full px-2.5 py-1 text-xs font-medium transition ${
+                  view === "month" ? "bg-white text-emerald-700" : "text-emerald-100"
+                }`}
+              >
+                Month
+              </Link>
+            </div>
+            <BalanceVisibilityToggle />
+          </div>
         </div>
-        <p className="mt-1 text-3xl font-semibold tracking-tight">
+        <p className="mt-0.5 text-2xl font-semibold tracking-tight">
           <MaskableAmount value={totalBalance} />
         </p>
-        <div className="mt-5 flex gap-4 text-sm">
+        <div className="mt-3 flex gap-4 text-xs">
           <div>
             <p className="text-emerald-100">Income</p>
             <p className="font-semibold"><MaskableAmount value={summary.income} /></p>
@@ -171,16 +166,16 @@ export default async function DashboardPage({
           </div>
         </div>
         {totalExpenseTarget > 0 && (
-          <p className="mt-4 text-xs font-medium text-emerald-100">
+          <p className="mt-3 text-xs font-medium text-emerald-100">
             {expenseVariance >= 0 ? (
               <>
                 <MaskableAmount value={expenseVariance} /> left of your{" "}
-                <MaskableAmount value={totalExpenseTarget} /> monthly budget
+                <MaskableAmount value={totalExpenseTarget} /> {view === "month" ? "monthly" : "cutoff"} budget
               </>
             ) : (
               <>
                 <MaskableAmount value={Math.abs(expenseVariance)} /> over your{" "}
-                <MaskableAmount value={totalExpenseTarget} /> monthly budget
+                <MaskableAmount value={totalExpenseTarget} /> {view === "month" ? "monthly" : "cutoff"} budget
               </>
             )}
           </p>
