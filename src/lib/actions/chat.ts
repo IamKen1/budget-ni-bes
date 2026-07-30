@@ -175,13 +175,6 @@ async function callProvider(provider: ProviderConfig, messages: unknown[]) {
   return res.json();
 }
 
-/** Models occasionally emit a malformed tool call (literal `<function=...>` text instead
- * of a structured call), which the provider rejects with a 400 tool_use_failed. This is
- * more likely on questions needing multiple/chained tool calls, so retry a few times —
- * it's usually just a stochastic formatting slip and a plain retry gets a clean call back.
- * A 429 (rate limit) is different — retrying immediately can't fix it, just burns more of
- * the quota and returns the same error, so that fails fast instead (to let the caller
- * move on to the next provider rather than waste retries on a dead one). */
 async function callProviderWithRetry(provider: ProviderConfig, messages: unknown[], attempts = 4) {
   let lastErr: unknown;
   for (let i = 0; i < attempts; i++) {
@@ -389,7 +382,17 @@ export async function sendChatMessage(history: ChatMessage[]): Promise<string> {
           args = {};
         }
 
-        const result = await executeTool(call.function.name, args);
+        // A single tool throwing (e.g. a transient DB hiccup) used to kill the whole
+        // reply with the generic glitch message and no chance to recover. Feeding the
+        // error back as a tool result instead lets the model see it, retry a different
+        // way, or explain the problem — same pattern as any other tool-level failure.
+        let result: unknown;
+        try {
+          result = await executeTool(call.function.name, args);
+        } catch (err) {
+          console.error(`Bes AI: tool ${call.function.name} failed:`, err);
+          result = { error: "This tool failed to run. Let the user know something went wrong rather than guessing the result." };
+        }
         messages.push({
           role: "tool",
           tool_call_id: call.id,
