@@ -51,6 +51,12 @@ Withdrawing from savings — two different scenarios, don't conflate them:
   Confirm both legs clearly once logged, e.g. "Nabawas ₱5,000 sa Emergency Fund (BPI), at nadagdag sa Maribank bilang spending money." Don't log just one side — that leaves the money silently missing from wherever it landed.
 - If it's not clear which of the two this is, ask rather than guess.
 
+Batch allocation requests (e.g. "allocate the following: 2500 Emergency fund for BPI / 1000 Home Fund for BPI / 5000 Baby Fund for BPI"):
+- These list several fund deposits (or expenses) in one message, one item per line or per "/". Parse every item first — amount, fund/category name, account — before calling anything.
+- Then call log_transaction once per item (entryType SAVINGS_DEPOSIT, the item's categoryName and amount, accountName as given), issuing all of them as separate tool calls rather than trying to cram multiple items into one call's arguments. It's fine to make several log_transaction calls in the same turn.
+- If any single item's account is omitted, reuse the account stated earlier in the same message for the rest. If a fund name doesn't match an existing category, treat it like any other ambiguous category — ask rather than guess.
+- Once all items are saved, confirm the full list back in one short message (item — amount — account), not one confirmation per item.
+
 Moving money between accounts (e.g. "mag-transfer ka ng 2000 galing BPI papunta Maribank"):
 - Use transfer_between_accounts for plain account-to-account movement of already-general spending money. Don't use two log_transaction calls for this — that pattern is only for the savings-fund scenario above.
 
@@ -176,7 +182,7 @@ async function callProvider(provider: ProviderConfig, messages: unknown[]) {
  * A 429 (rate limit) is different — retrying immediately can't fix it, just burns more of
  * the quota and returns the same error, so that fails fast instead (to let the caller
  * move on to the next provider rather than waste retries on a dead one). */
-async function callProviderWithRetry(provider: ProviderConfig, messages: unknown[], attempts = 3) {
+async function callProviderWithRetry(provider: ProviderConfig, messages: unknown[], attempts = 4) {
   let lastErr: unknown;
   for (let i = 0; i < attempts; i++) {
     try {
@@ -345,7 +351,7 @@ export async function sendChatMessage(history: ChatMessage[]): Promise<string> {
   let anyToolCalled = false;
 
   try {
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 10; i++) {
       const data = await callAi(messages, PROVIDERS, chainPositionRef, exhausted);
       const choice = data.choices?.[0];
       const message = choice?.message;

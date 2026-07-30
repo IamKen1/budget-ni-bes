@@ -8,17 +8,17 @@ import { useBalanceVisibility } from "@/components/BalanceVisibilityContext";
 
 const entryTone: Record<string, string> = {
   INCOME: "text-emerald-600 dark:text-emerald-400",
-  SAVINGS_WITHDRAW: "text-emerald-600 dark:text-emerald-400",
+  SAVINGS_DEPOSIT: "text-emerald-600 dark:text-emerald-400",
   EXPENSE: "text-red-500 dark:text-red-400",
-  SAVINGS_DEPOSIT: "text-amber-600 dark:text-amber-400",
+  SAVINGS_WITHDRAW: "text-amber-600 dark:text-amber-400",
   TRANSFER: "text-zinc-500 dark:text-zinc-400",
 };
 
 const entrySign: Record<string, string> = {
   INCOME: "+",
-  SAVINGS_WITHDRAW: "+",
+  SAVINGS_DEPOSIT: "+",
   EXPENSE: "-",
-  SAVINGS_DEPOSIT: "-",
+  SAVINGS_WITHDRAW: "-",
   TRANSFER: "",
 };
 
