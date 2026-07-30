@@ -23,6 +23,7 @@ import { toggleArchiveCategory } from "@/lib/actions/categories";
 import { useDesktopFilter } from "@/components/desktop/DesktopFilterContext";
 
 export function DesktopSidebar({
+  view,
   cutoff,
   periodLabel,
   totalBalance,
@@ -34,6 +35,7 @@ export function DesktopSidebar({
   savingsCategories,
   upcomingLoanGroup,
 }: {
+  view: "cutoff" | "month";
   cutoff: string;
   periodLabel: string;
   totalBalance: number;
@@ -56,7 +58,29 @@ export function DesktopSidebar({
           <p className="text-[11px] text-zinc-400">Hi, Bes 👋 · {cutoff} cutoff</p>
           <h1 className="text-sm font-semibold tracking-tight">{periodLabel} Budget</h1>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
+          <div className="flex gap-0.5 rounded-full bg-zinc-100 p-0.5 dark:bg-zinc-900">
+            <Link
+              href="/?view=cutoff"
+              className={`rounded-full px-2 py-1 text-[10px] font-medium transition ${
+                view === "cutoff"
+                  ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-800 dark:text-zinc-100"
+                  : "text-zinc-500 dark:text-zinc-400"
+              }`}
+            >
+              Cutoff
+            </Link>
+            <Link
+              href="/?view=month"
+              className={`rounded-full px-2 py-1 text-[10px] font-medium transition ${
+                view === "month"
+                  ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-800 dark:text-zinc-100"
+                  : "text-zinc-500 dark:text-zinc-400"
+              }`}
+            >
+              Month
+            </Link>
+          </div>
           <Link
             href="/settings"
             aria-label="Settings"
@@ -194,7 +218,7 @@ export function DesktopSidebar({
 
       <section className="mt-3">
         <h2 className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
-          Budget This Month
+          Budget {view === "month" ? "This Month" : "This Cutoff"}
         </h2>
         <div className="mt-1.5 flex flex-col gap-2.5">
           {expenseCategories.slice(0, 4).map((c) => {
@@ -210,7 +234,7 @@ export function DesktopSidebar({
                   active ? "bg-emerald-50 dark:bg-emerald-950/40" : "hover:bg-zinc-50 dark:hover:bg-zinc-900"
                 }`}
               >
-                <ProgressBar label={c.name} value={c.periodTotal} target={c.monthlyTarget} />
+                <ProgressBar label={c.name} value={c.periodTotal} target={c.periodTarget} />
               </button>
             );
           })}
@@ -231,6 +255,7 @@ export function DesktopSidebar({
                     categoryId={c.id}
                     monthlyTarget={c.monthlyTarget}
                     goalTarget={c.goalTarget}
+                    firstHalfTarget={savingsCategories.some((s) => s.id === c.id) ? undefined : c.firstHalfTarget}
                     showGoal={savingsCategories.some((s) => s.id === c.id)}
                   />
                   <ArchiveToggleButton id={c.id} archived={c.archived} toggleAction={toggleArchiveCategory} />

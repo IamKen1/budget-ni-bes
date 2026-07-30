@@ -69,6 +69,11 @@ model Category {
   name          String       @unique
   kind          CategoryKind
   monthlyTarget Decimal      @default(0) @db.Decimal(12, 2)
+  /// Budget target for the 1-15 cutoff (EXPENSE kind only). The 16-end cutoff's
+  /// target is derived as monthlyTarget - firstHalfTarget, so the two always
+  /// stay in sync with the full-month figure without duplicating data entry.
+  /// Not always an even half — e.g. "Jen CC" is 8000/4000, not 6000/6000.
+  firstHalfTarget Decimal    @default(0) @db.Decimal(12, 2)
   /// Long-term savings goal for this fund (SAVINGS kind only). 0 = no goal set.
   goalTarget    Decimal      @default(0) @db.Decimal(12, 2)
   archived      Boolean      @default(false)

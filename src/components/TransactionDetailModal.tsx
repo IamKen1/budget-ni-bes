@@ -67,11 +67,9 @@ function TransactionDetailBody({
   const [error, setError] = useState<string | null>(null);
 
   const title =
-    transaction.particulars ||
-    transaction.category?.name ||
-    (transaction.entryType === "TRANSFER"
+    transaction.entryType === "TRANSFER"
       ? `${transaction.account.name} → ${transaction.toAccount?.name ?? ""}`
-      : entryTypeLabel[transaction.entryType]);
+      : transaction.particulars || transaction.category?.name || entryTypeLabel[transaction.entryType];
 
   return (
     <div

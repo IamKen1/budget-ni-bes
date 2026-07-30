@@ -30,6 +30,26 @@ export function currentCutoffLabel(reference: Date = new Date()): string {
   return d.date() <= 15 ? `1-15` : `16-${d.endOf("month").format("D")}`;
 }
 
+/** The current semi-monthly cutoff period (1-15 or 16-end) as a DateRange, for
+ * dashboards that want to scope KPIs to the current cutoff instead of the
+ * full calendar month. See currentCutoffLabel for the underlying schedule. */
+export function cutoffRange(reference: Date = new Date()): DateRange {
+  const d = dayjs(reference);
+  const monthLabel = d.format("MMMM");
+  if (d.date() <= 15) {
+    return {
+      start: d.startOf("month").toDate(),
+      end: d.startOf("month").add(14, "day").endOf("day").toDate(),
+      label: `${monthLabel} 1-15`,
+    };
+  }
+  return {
+    start: d.startOf("month").add(15, "day").toDate(),
+    end: d.endOf("month").toDate(),
+    label: `${monthLabel} 16-${d.endOf("month").format("D")}`,
+  };
+}
+
 export type SerializedAccount = Omit<Account, "monthlyTarget"> & { monthlyTarget: number };
 
 function serializeAccount(account: Account): SerializedAccount {
@@ -158,15 +178,29 @@ export async function getMonthlyAccountBalanceHistory(): Promise<{
   return { accounts: serialized, rows: rows.reverse() };
 }
 
-export type CategoryProgress = Omit<Category, "monthlyTarget" | "goalTarget"> & {
+export type CategoryProgress = Omit<Category, "monthlyTarget" | "goalTarget" | "firstHalfTarget"> & {
   monthlyTarget: number;
   goalTarget: number;
+  firstHalfTarget: number;
+  /// The target to compare periodTotal against for whatever range was passed in —
+  /// monthlyTarget for a full month, or the correct half (firstHalfTarget, or
+  /// monthlyTarget - firstHalfTarget) when range is a single cutoff.
+  periodTarget: number;
   periodTotal: number;
   allTimeTotal: number;
 };
 
+export type TargetScope = "month" | "first-half" | "second-half";
+
+function periodTargetFor(scope: TargetScope, monthlyTarget: number, firstHalfTarget: number): number {
+  if (scope === "first-half") return firstHalfTarget;
+  if (scope === "second-half") return monthlyTarget - firstHalfTarget;
+  return monthlyTarget;
+}
+
 export async function getExpenseCategoriesWithProgress(
-  range: DateRange = monthRange()
+  range: DateRange = monthRange(),
+  targetScope: TargetScope = "month"
 ): Promise<CategoryProgress[]> {
   const { start, end } = range;
   const categories = await prisma.category.findMany({
@@ -187,7 +221,9 @@ export async function getExpenseCategoriesWithProgress(
       allTimeTotal += amount;
       if (tx.date >= start && tx.date <= end) periodTotal += amount;
     }
-    return { ...serializeCategory(category), periodTotal, allTimeTotal };
+    const serialized = serializeCategory(category);
+    const periodTarget = periodTargetFor(targetScope, serialized.monthlyTarget, serialized.firstHalfTarget);
+    return { ...serialized, periodTotal, allTimeTotal, periodTarget };
   });
 }
 
@@ -214,7 +250,8 @@ export async function getSavingsCategoriesWithProgress(
       allTimeTotal += signed;
       if (tx.date >= start && tx.date <= end) periodTotal += signed;
     }
-    return { ...serializeCategory(category), periodTotal, allTimeTotal };
+    const serialized = serializeCategory(category);
+    return { ...serialized, periodTotal, allTimeTotal, periodTarget: serialized.monthlyTarget };
   });
 }
 
@@ -263,9 +300,10 @@ export type SerializedTransaction = Omit<Transaction, "amount"> & {
   runningBalance?: number;
 };
 
-export type SerializedCategory = Omit<Category, "monthlyTarget" | "goalTarget"> & {
+export type SerializedCategory = Omit<Category, "monthlyTarget" | "goalTarget" | "firstHalfTarget"> & {
   monthlyTarget: number;
   goalTarget: number;
+  firstHalfTarget: number;
 };
 
 function serializeTransaction<
@@ -285,6 +323,7 @@ function serializeCategory(category: Category): SerializedCategory {
     ...category,
     monthlyTarget: toNumber(category.monthlyTarget),
     goalTarget: toNumber(category.goalTarget),
+    firstHalfTarget: toNumber(category.firstHalfTarget),
   };
 }
 

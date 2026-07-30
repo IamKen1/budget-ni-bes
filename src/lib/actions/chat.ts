@@ -61,6 +61,14 @@ Batch allocation requests (e.g. "allocate the following: 2500 Emergency fund for
 Moving money between accounts (e.g. "mag-transfer ka ng 2000 galing BPI papunta Maribank"):
 - Use transfer_between_accounts for plain account-to-account movement of already-general spending money. Don't use two log_transaction calls for this — that pattern is only for the savings-fund scenario above.
 
+Paying off a credit card from another account — TWO separate log_transaction calls, not transfer_between_accounts (e.g. "log expense of 1000 for gas used BPI Credit Card payment under maribank", "nagbayad kami ng 1000 sa BPI credit card galing sa maribank"):
+- Same two-log-calls principle as the withdrawing-from-savings pattern above — this is real money moving between two different buckets the family tracks separately, so both sides need their own visible entry, matching how the family's old spreadsheet tracked it:
+  1. entryType EXPENSE, accountName = the account paying the bill (e.g. Maribank), categoryName = whatever the purchase actually was (e.g. "Motor/Car Gas/Diesel" for gas), NOT a credit-card-specific category — the category should reflect what the money was spent on, same as any other expense. Ask if you're not sure which category fits, per the usual rule.
+  2. entryType SAVINGS_DEPOSIT, accountName = the credit card account (e.g. "BPI - Credit Card Payment"), categoryName = "CC for payment", amount = the same payment amount. This tracks how much has been paid toward the card as a fund, visible on the Savings page too.
+- Call get_balances first to confirm the exact real name of the credit card account — it's often named distinctly from the plain bank account (e.g. "BPI - Credit Card Payment" vs. just "BPI"), so never assume or guess which one is meant.
+- Confirm both legs clearly once logged, e.g. "Nabawas ₱1,000 sa Maribank (Motor/Car Gas/Diesel), at nadagdag sa BPI - Credit Card Payment bilang CC for payment." Don't log just one side.
+- If it's unclear which account is paying, which credit card account is being paid, or which category the purchase falls under, ask rather than assume.
+
 Tips and advice:
 - Whenever asked for tips or advice, ground them in the user's actual numbers (categories nearing/over budget, spending trends, low balances) — never generic textbook advice.
 - Keep tips actionable and specific to what you just pulled from the tools.
@@ -405,8 +413,21 @@ export async function sendChatMessage(history: ChatMessage[]): Promise<string> {
     console.error("Bes AI chat failed:", err);
     // Both providers were tried (callAi falls back automatically) and both failed —
     // only then is it worth telling the user it's a quota issue vs. a generic glitch.
+    // `exhausted` was mutated in-place by callAi as each provider 429'd, so it holds
+    // the real retryAfter for whatever just failed — some of these are a burst
+    // per-minute token cap (seconds away), not always a daily quota, so the wording
+    // has to reflect the actual wait instead of always claiming a 24h reset.
     if (err instanceof AiProviderError && err.status === 429) {
-      return "Naubos muna yung AI message quota namin for today Bes — nire-reset siya every 24 hours. Subukan ulit mamaya, sorry sa abala!";
+      const retryTimes = Array.from(exhausted.values()).map((d) => d.getTime());
+      const soonest = retryTimes.length > 0 ? new Date(Math.min(...retryTimes)) : new Date(Date.now() + 5 * 60 * 1000);
+      const waitMs = soonest.getTime() - Date.now();
+      const waitLabel =
+        waitMs <= 90 * 1000
+          ? "ilang segundo na lang"
+          : waitMs <= 60 * 60 * 1000
+            ? `mga ${Math.ceil(waitMs / 60000)} minuto`
+            : `around ${dayjs(soonest).format("h:mm A")}`;
+      return `Naubos muna yung AI message quota namin Bes — subukan ulit sa ${waitLabel}, sorry sa abala!`;
     }
     return "Medyo nag-glitch ako dyan Bes — pwede mo bang subukan ulit?";
   }

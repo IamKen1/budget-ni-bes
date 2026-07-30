@@ -28,6 +28,9 @@ export async function createCategory(formData: FormData) {
       kind: parsed.kind,
       monthlyTarget: parsed.monthlyTarget ?? 0,
       goalTarget: parsed.goalTarget ?? 0,
+      // Starts as an even split between the two cutoffs — adjustable later via
+      // Edit target for categories that don't split evenly (e.g. "Jen CC").
+      firstHalfTarget: (parsed.monthlyTarget ?? 0) / 2,
       sortOrder: count,
     },
   });
@@ -73,6 +76,9 @@ const targetsSchema = z.object({
   id: z.string().min(1),
   monthlyTarget: z.coerce.number().min(0),
   goalTarget: z.coerce.number().min(0),
+  // 1-15 cutoff's share of monthlyTarget (EXPENSE only) — the 16-end cutoff's
+  // target is monthlyTarget - firstHalfTarget, so only one number is stored.
+  firstHalfTarget: z.coerce.number().min(0).optional(),
 });
 
 export async function updateCategoryTargets(formData: FormData) {
@@ -80,14 +86,17 @@ export async function updateCategoryTargets(formData: FormData) {
     id: formData.get("id"),
     monthlyTarget: formData.get("monthlyTarget"),
     goalTarget: formData.get("goalTarget"),
+    firstHalfTarget: formData.get("firstHalfTarget") || undefined,
   });
 
   const before = await prisma.category.findUnique({ where: { id: parsed.id } });
   if (!before) return { error: "Category not found." };
 
+  const firstHalfTarget = Math.min(parsed.firstHalfTarget ?? parsed.monthlyTarget / 2, parsed.monthlyTarget);
+
   const category = await prisma.category.update({
     where: { id: parsed.id },
-    data: { monthlyTarget: parsed.monthlyTarget, goalTarget: parsed.goalTarget },
+    data: { monthlyTarget: parsed.monthlyTarget, goalTarget: parsed.goalTarget, firstHalfTarget },
   });
 
   const activity = await recordActivity({

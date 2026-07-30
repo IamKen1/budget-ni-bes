@@ -1,4 +1,5 @@
 import Link from "next/link";
+import dayjs from "dayjs";
 import {
   getAccountsWithBalances,
   getExpenseCategoriesWithProgress,
@@ -9,6 +10,7 @@ import {
   getAllTransactions,
   getLoanPaymentsByMonth,
   monthRange,
+  cutoffRange,
   currentCutoffLabel,
 } from "@/lib/queries";
 import { formatMoney } from "@/lib/format";
@@ -22,16 +24,26 @@ import { SpecialDayBanner } from "@/components/SpecialDayBanner";
 import { RefreshButton } from "@/components/RefreshButton";
 import { DesktopDashboard } from "@/components/desktop/DesktopDashboard";
 
-export default async function DashboardPage() {
-  // Budget targets (monthlyTarget) are full-month figures, so KPIs comparing
-  // against them must also cover the full month — comparing only the current
-  // cutoff's spend against a full-month target understated how much budget
-  // was actually left. The cutoff label below is still shown for context.
-  const period = monthRange();
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ view?: string }>;
+}) {
+  // Defaults to the current semi-monthly cutoff (1-15 / 16-end) rather than
+  // the full calendar month, since that's the period salary actually lands
+  // in and the family budgets against — a "Month" toggle is available for
+  // whoever wants the full-month totals instead. Each expense category has
+  // its own per-cutoff target (firstHalfTarget / monthlyTarget - firstHalfTarget)
+  // since the split isn't always even (e.g. "Jen CC" is 8000/4000) — periodTarget
+  // below always reflects whichever one matches the active view.
+  const { view: viewParam } = await searchParams;
+  const view = viewParam === "month" ? "month" : "cutoff";
+  const period = view === "month" ? monthRange() : cutoffRange();
+  const targetScope = view === "month" ? "month" : dayjs().date() <= 15 ? "first-half" : "second-half";
   const [accounts, expenseCategories, savingsCategories, summary, personSpend, recent, allTransactions, loanGroups] =
     await Promise.all([
       getAccountsWithBalances(),
-      getExpenseCategoriesWithProgress(period),
+      getExpenseCategoriesWithProgress(period, targetScope),
       getSavingsCategoriesWithProgress(period),
       getPeriodSummary(period),
       getPersonSpendBreakdown(period),
@@ -44,7 +56,7 @@ export default async function DashboardPage() {
   const upcomingLoanCount = upcomingLoanGroup?.payments.filter((p) => !p.paid).length ?? 0;
 
   const totalBalance = accounts.reduce((sum, a) => sum + a.balance, 0);
-  const totalExpenseTarget = expenseCategories.reduce((sum, c) => sum + c.monthlyTarget, 0);
+  const totalExpenseTarget = expenseCategories.reduce((sum, c) => sum + c.periodTarget, 0);
   const expenseVariance = totalExpenseTarget - summary.expense;
   const cutoff = currentCutoffLabel();
   const totalPersonSpend = personSpend.JENNA + personSpend.KENNETH + personSpend.SHARED;
@@ -53,6 +65,7 @@ export default async function DashboardPage() {
     <>
     <div className="hidden lg:block">
       <DesktopDashboard
+        view={view}
         cutoff={cutoff}
         periodLabel={period.label}
         totalBalance={totalBalance}
@@ -75,6 +88,28 @@ export default async function DashboardPage() {
           <h1 className="text-xl font-semibold tracking-tight">{period.label} Budget</h1>
         </div>
         <div className="flex items-center gap-2">
+          <div className="flex gap-0.5 rounded-full bg-zinc-100 p-0.5 dark:bg-zinc-900">
+            <Link
+              href="/?view=cutoff"
+              className={`rounded-full px-2.5 py-1.5 text-xs font-medium transition ${
+                view === "cutoff"
+                  ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-800 dark:text-zinc-100"
+                  : "text-zinc-500 dark:text-zinc-400"
+              }`}
+            >
+              Cutoff
+            </Link>
+            <Link
+              href="/?view=month"
+              className={`rounded-full px-2.5 py-1.5 text-xs font-medium transition ${
+                view === "month"
+                  ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-800 dark:text-zinc-100"
+                  : "text-zinc-500 dark:text-zinc-400"
+              }`}
+            >
+              Month
+            </Link>
+          </div>
           <RefreshButton />
           <Link
             href="/settings"
@@ -244,7 +279,9 @@ export default async function DashboardPage() {
 
       <section>
         <div className="flex items-center justify-between px-1">
-          <h2 className="text-sm font-semibold text-zinc-500 dark:text-zinc-400">Budget This Month</h2>
+          <h2 className="text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+            Budget {view === "month" ? "This Month" : "This Cutoff"}
+          </h2>
           <Link href="/categories" className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
             View all
           </Link>
@@ -255,7 +292,7 @@ export default async function DashboardPage() {
               <ProgressBar
                 label={category.name}
                 value={category.periodTotal}
-                target={category.monthlyTarget}
+                target={category.periodTarget}
               />
             </Link>
           ))}

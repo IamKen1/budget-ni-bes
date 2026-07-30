@@ -11,6 +11,7 @@ import { DesktopFilterProvider } from "@/components/desktop/DesktopFilterContext
 import { SpecialDayBanner } from "@/components/SpecialDayBanner";
 
 export function DesktopDashboard({
+  view,
   cutoff,
   periodLabel,
   totalBalance,
@@ -23,6 +24,7 @@ export function DesktopDashboard({
   transactions,
   upcomingLoanGroup,
 }: {
+  view: "cutoff" | "month";
   cutoff: string;
   periodLabel: string;
   totalBalance: number;
@@ -39,6 +41,7 @@ export function DesktopDashboard({
     <DesktopFilterProvider>
       <div className="flex h-dvh w-full overflow-hidden">
         <DesktopSidebar
+          view={view}
           cutoff={cutoff}
           periodLabel={periodLabel}
           totalBalance={totalBalance}

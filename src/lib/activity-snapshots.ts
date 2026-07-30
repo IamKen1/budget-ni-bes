@@ -75,6 +75,7 @@ export function categorySnapshot(c: {
   kind: string;
   monthlyTarget: unknown;
   goalTarget: unknown;
+  firstHalfTarget: unknown;
   archived: boolean;
   sortOrder: number;
 }) {
@@ -83,6 +84,7 @@ export function categorySnapshot(c: {
     kind: c.kind,
     monthlyTarget: toNumber(c.monthlyTarget),
     goalTarget: toNumber(c.goalTarget),
+    firstHalfTarget: toNumber(c.firstHalfTarget),
     archived: c.archived,
     sortOrder: c.sortOrder,
   };

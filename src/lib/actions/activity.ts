@@ -35,20 +35,29 @@ export async function recordActivity(params: {
   });
 }
 
-export async function getRecentActivity(limit = 20) {
-  const rows = await prisma.activityLog.findMany({
-    orderBy: { createdAt: "desc" },
-    take: limit,
-  });
-  return rows.map((r) => ({
-    id: r.id,
-    entity: r.entity,
-    action: r.action,
-    summary: r.summary,
-    undone: r.undoneAt !== null,
-    createdAt: r.createdAt.toISOString(),
-    when: dayjs(r.createdAt).format("MMM D, h:mm A"),
-  }));
+export async function getRecentActivity(page = 1, pageSize = 5) {
+  const skip = (Math.max(1, page) - 1) * pageSize;
+  const [rows, total] = await Promise.all([
+    prisma.activityLog.findMany({
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: pageSize,
+    }),
+    prisma.activityLog.count(),
+  ]);
+  return {
+    items: rows.map((r) => ({
+      id: r.id,
+      entity: r.entity,
+      action: r.action,
+      summary: r.summary,
+      undone: r.undoneAt !== null,
+      createdAt: r.createdAt.toISOString(),
+      when: dayjs(r.createdAt).format("MMM D, h:mm A"),
+    })),
+    page: Math.max(1, page),
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+  };
 }
 
 async function undoTransaction(log: {
@@ -109,6 +118,7 @@ async function undoCategory(log: { entityId: string; action: Action; before: unk
     kind: d.kind as never,
     monthlyTarget: d.monthlyTarget,
     goalTarget: d.goalTarget,
+    firstHalfTarget: d.firstHalfTarget,
     archived: d.archived,
     sortOrder: d.sortOrder,
   };

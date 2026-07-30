@@ -26,15 +26,16 @@ export function TransactionRow({ transaction }: { transaction: SerializedTransac
   const { open } = useTransactionDetail();
   const { visible } = useBalanceVisibility();
 
-  const title =
-    transaction.particulars ||
-    transaction.category?.name ||
-    (transaction.entryType === "TRANSFER"
-      ? `${transaction.account.name} → ${transaction.toAccount?.name ?? ""}`
-      : entryTypeLabel[transaction.entryType]);
+  const isTransfer = transaction.entryType === "TRANSFER";
+
+  // For transfers, which accounts moved money is the primary fact — always show the
+  // arrow as the title, never let a note silently hide which account got the other side.
+  const title = isTransfer
+    ? `${transaction.account.name} → ${transaction.toAccount?.name ?? ""}`
+    : transaction.particulars || transaction.category?.name || entryTypeLabel[transaction.entryType];
 
   const subtitle = [
-    transaction.account.name,
+    isTransfer ? transaction.particulars : transaction.account.name,
     transaction.category?.name && transaction.category.name !== title
       ? transaction.category.name
       : null,

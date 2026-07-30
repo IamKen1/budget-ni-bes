@@ -1,9 +1,16 @@
+import Link from "next/link";
 import { getRecentActivity } from "@/lib/actions/activity";
 import { ActivityRow } from "@/components/ActivityRow";
 import { ClearDataForm } from "@/components/ClearDataForm";
 
-export default async function SettingsPage() {
-  const activity = await getRecentActivity(20);
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
+  const { page: pageParam } = await searchParams;
+  const page = Math.max(1, Number(pageParam) || 1);
+  const activity = await getRecentActivity(page, 5);
 
   return (
     <div className="flex flex-col gap-5 pb-4 lg:mx-auto lg:max-w-lg lg:px-4 lg:pt-6">
@@ -22,13 +29,42 @@ export default async function SettingsPage() {
           Made a mistake — wrong amount, wrong category, deleted the wrong entry? Undo it here.
         </p>
         <div className="flex flex-col gap-1 rounded-2xl border border-zinc-200 bg-white p-2 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          {activity.map((a) => (
+          {activity.items.map((a) => (
             <ActivityRow key={a.id} id={a.id} summary={a.summary} when={a.when} undone={a.undone} />
           ))}
-          {activity.length === 0 && (
+          {activity.items.length === 0 && (
             <p className="p-3 text-sm text-zinc-400">No recent actions yet.</p>
           )}
         </div>
+        {activity.totalPages > 1 && (
+          <div className="mt-2 flex items-center justify-center gap-4">
+            <Link
+              href={`/settings?page=${activity.page - 1}`}
+              aria-disabled={activity.page <= 1}
+              className={`text-sm font-medium ${
+                activity.page <= 1
+                  ? "pointer-events-none text-zinc-300 dark:text-zinc-700"
+                  : "text-emerald-600 dark:text-emerald-400"
+              }`}
+            >
+              Previous
+            </Link>
+            <span className="text-xs text-zinc-400">
+              Page {activity.page} of {activity.totalPages}
+            </span>
+            <Link
+              href={`/settings?page=${activity.page + 1}`}
+              aria-disabled={activity.page >= activity.totalPages}
+              className={`text-sm font-medium ${
+                activity.page >= activity.totalPages
+                  ? "pointer-events-none text-zinc-300 dark:text-zinc-700"
+                  : "text-emerald-600 dark:text-emerald-400"
+              }`}
+            >
+              Next
+            </Link>
+          </div>
+        )}
       </section>
 
       <section>
