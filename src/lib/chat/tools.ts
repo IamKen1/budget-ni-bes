@@ -96,7 +96,7 @@ export const toolDefinitions = [
     function: {
       name: "log_transaction",
       description:
-        "Record a new transaction (expense, income, savings deposit/withdraw, or transfer) in the budget tracker. For EXPENSE/SAVINGS entries, if categoryName is omitted and there's no learned match for the note, this returns needsCategory instead of saving — ask the user which category, then call again with categoryName (and learnKeyword to remember it).",
+        "Record a new transaction (expense, income, savings deposit/withdraw, or transfer) in the budget tracker. For EXPENSE/SAVINGS entries, if categoryName is omitted and there's no learned match for the note, this returns needsCategory instead of saving — ask the user which category, then call again with categoryName (and learnKeyword to remember it). If accountName is given but doesn't confidently match a real account, this returns needsAccount instead of saving — ask the user which account, then call again with accountName set to their answer.",
       parameters: {
         type: "object",
         properties: {
@@ -107,7 +107,7 @@ export const toolDefinitions = [
           amount: { type: "number", description: "Peso amount, positive number." },
           accountName: {
             type: "string",
-            description: "Which account the money moved through, e.g. 'Maribank', 'BPI', 'Cash on Hand'. Defaults to Maribank if unsure.",
+            description: "Which account the money moved through, e.g. 'Maribank', 'BPI', 'Cash on Hand'. Call get_balances first to see the real account names — never invent one. Omit entirely (don't guess) if you're not sure which account; it then defaults to Maribank.",
           },
           categoryName: {
             type: "string",
@@ -433,11 +433,21 @@ async function toolLogTransaction(args: {
   }
 
   const accounts = await prisma.account.findMany({ where: { archived: false } });
-  const account =
-    accounts.find((a) => a.name.toLowerCase() === (args.accountName ?? "").toLowerCase()) ??
-    accounts.find((a) => a.name.toLowerCase().includes((args.accountName ?? "").toLowerCase())) ??
-    accounts.find((a) => a.name === "Maribank") ??
-    accounts[0];
+
+  let account;
+  if (!args.accountName) {
+    // No account named at all — fall back to the household default.
+    account = accounts.find((a) => a.name === "Maribank") ?? accounts[0];
+  } else {
+    account = matchAccount(accounts, args.accountName);
+    if (!account) {
+      return {
+        needsAccount: true,
+        availableAccounts: accounts.map((a) => a.name),
+        instruction: `No confident match for account "${args.accountName}". Ask the user which real account to use (see availableAccounts), then call log_transaction again with accountName set to their answer — never invent or guess an account name.`,
+      };
+    }
+  }
 
   if (!account) return { error: "No account found to log this against." };
 
@@ -517,13 +527,32 @@ async function toolLogTransaction(args: {
   };
 }
 
+function normalizeAccountName(name: string) {
+  return name.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+// Matches on normalized (case/whitespace/punctuation-insensitive) equality first,
+// then bidirectional substring containment (stored name is a substring of the input,
+// or vice versa) — e.g. stored "BPI" matches spoken "BPI Credit Card" and vice versa.
+// Returns undefined (never a wrong guess) when nothing or more than one candidate matches.
+function matchAccount<T extends { name: string }>(accounts: T[], name: string): T | undefined {
+  const target = normalizeAccountName(name);
+  if (!target) return undefined;
+
+  const exact = accounts.find((a) => normalizeAccountName(a.name) === target);
+  if (exact) return exact;
+
+  const substringMatches = accounts.filter((a) => {
+    const stored = normalizeAccountName(a.name);
+    return stored.includes(target) || target.includes(stored);
+  });
+  return substringMatches.length === 1 ? substringMatches[0] : undefined;
+}
+
 async function resolveAccount(name?: string) {
+  if (!name) return undefined;
   const accounts = await prisma.account.findMany({ where: { archived: false } });
-  return (
-    accounts.find((a) => a.name.toLowerCase() === (name ?? "").toLowerCase()) ??
-    accounts.find((a) => a.name.toLowerCase().includes((name ?? "").toLowerCase())) ??
-    undefined
-  );
+  return matchAccount(accounts, name);
 }
 
 async function resolveCategory(name: string, kind: "EXPENSE" | "SAVINGS") {
