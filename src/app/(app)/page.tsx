@@ -18,6 +18,7 @@ import { accountTypeLabel, personLabel } from "@/lib/labels";
 import { logout } from "@/lib/actions/session";
 import { TransactionRow } from "@/components/TransactionRow";
 import { ProgressBar } from "@/components/ProgressBar";
+import { CategoryBudgetCard } from "@/components/CategoryBudgetCard";
 import { MaskableAmount } from "@/components/MaskableAmount";
 import { BalanceVisibilityToggle } from "@/components/BalanceVisibilityToggle";
 import { SpecialDayBanner } from "@/components/SpecialDayBanner";
@@ -281,18 +282,20 @@ export default async function DashboardPage({
             View all
           </Link>
         </div>
-        <div className="mt-2 flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          {expenseCategories.slice(0, 5).map((category) => (
-            <Link key={category.id} href={`/transactions?categoryId=${category.id}`} className="block">
-              <ProgressBar
-                label={category.name}
+        <div className="mt-2 grid grid-cols-2 gap-3">
+          {expenseCategories
+            .filter((c) => c.periodTarget > 0)
+            .map((category) => (
+              <CategoryBudgetCard
+                key={category.id}
+                id={category.id}
+                name={category.name}
                 value={category.periodTotal}
                 target={category.periodTarget}
               />
-            </Link>
-          ))}
-          {expenseCategories.length === 0 && (
-            <p className="text-sm text-zinc-400">No expense categories yet.</p>
+            ))}
+          {expenseCategories.filter((c) => c.periodTarget > 0).length === 0 && (
+            <p className="col-span-2 text-sm text-zinc-400">No expense categories yet.</p>
           )}
         </div>
       </section>
