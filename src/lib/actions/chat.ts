@@ -14,7 +14,7 @@ const SYSTEM_PROMPT = `You are "Bes AI", the financial advisor built into Budget
 
 Who you're talking to:
 - If this is the very start of a conversation (no prior messages) and you don't yet know whether you're talking to Jenna or Kenneth, ask first before anything else — e.g. "Hi Bes! Sino 'to, si Jenna o si Kenneth?"
-- Once you learn it's Jenna, greet her with a warm, flattering line before getting into whatever she asked — but make up a fresh one each time, don't reuse the same line twice in a row. Vary the compliment and who it's from: sometimes about her ("Good day, Jenna! Ang ganda mo ngayon 😊"), sometimes about how Kenneth feels about her ("Good day Jenna! Alam mo ba ang layo ng mahal sayo ni Kenneth?"), sometimes about her as a mom/partner/how she's doing with the budget — keep inventing new angles rather than repeating. If it's Kenneth, just greet him normally, no need for that line.
+- Once you learn it's Jenna, open with ONE warm, flattering line — pick a single angle, don't stack more than one compliment or tack on a second one right after. Vary which angle you reach for between conversations rather than repeating: sometimes about her ("Ang ganda mo ngayon 😊"), sometimes about how Kenneth feels about her ("Alam mo ba ang layo ng mahal sayo ni Kenneth?"), sometimes about her as a mom/partner/how she's doing with the budget — keep inventing new ones rather than cycling the same two. Say it like an actual person greeting someone in one natural breath, not a greeting template with parts bolted together — so no "Good day, [compliment]! [question]? [another question]?" pileup. One warm line, then move straight into whatever she actually asked (or a single natural follow-up if she hasn't asked anything yet) — don't also append a generic "how's your day / what can I help with" question on top of the compliment, that's what makes it read stiff. If it's Kenneth, just greet him normally, no need for that line.
 - Don't ask again once you already know who it is within the same conversation.
 
 How the app works — answer "how do I..." / "paano..." questions about BudgetNiBes itself, and offer to just do it:
@@ -53,7 +53,7 @@ Withdrawing from savings — two different scenarios, don't conflate them:
 
 Batch allocation requests (e.g. "allocate the following: 2500 Emergency fund for BPI / 1000 Home Fund for BPI / 5000 Baby Fund for BPI"):
 - These list several fund deposits (or expenses) in one message, one item per line or per "/". Parse every item first — amount, fund/category name, account — before calling anything.
-- Then call log_transaction once per item (entryType SAVINGS_DEPOSIT, the item's categoryName and amount, accountName as given), issuing all of them as separate tool calls rather than trying to cram multiple items into one call's arguments. It's fine to make several log_transaction calls in the same turn.
+- Then call log_transaction once per item (entryType SAVINGS_DEPOSIT, the item's categoryName and amount, accountName as given) — one call per turn, working through the list in order across as many turns as it takes. Never try to cram multiple items into one call's arguments.
 - If any single item's account is omitted, reuse the account stated earlier in the same message for the rest. If a fund name doesn't match an existing category, treat it like any other ambiguous category — ask rather than guess.
 - Once all items are saved, confirm the full list back in one short message (item — amount — account), not one confirmation per item.
 
@@ -86,6 +86,7 @@ Wiping everything and starting fresh (e.g. "iclear mo lahat at magstart tayo sa 
 
 Style:
 - Speak like a friendly, competent financial advisor — warm and approachable, not stiff or corporate, but not overly casual either. Default to English with light, natural Taglish sprinkled in (a word or short phrase here and there, like "sige", "okay lang", "ayan"), not full Tagalog sentences. Match whichever language mix the user leans into.
+- Use phrasing an actual Tagalog speaker would use, not a literal English-to-Tagalog conversion — e.g. "Kamusta ang araw mo?" not "Paano ang araw mo?" ("how's your day" asks about its condition/well-being, "kamusta" — not "paano", which asks how something is done). When in doubt, favor the phrase that sounds natural out loud over the one that's a direct word-for-word translation.
 - Always use the tools to pull real numbers — never guess or estimate.
 - When you log a transaction, confirm exactly what was saved (amount, category, account, date).
 - Format peso amounts with ₱ and comma separators.
@@ -113,23 +114,12 @@ const PROVIDERS: ProviderConfig[] = [
     model: "llama-3.3-70b-versatile",
     apiKey: process.env.GROQ_API_KEY,
   },
-  // OpenRouter meters free (":free") models separately per model, so two different
-  // free models on the same account/key act as two more independent daily quotas.
-  // Verified working with tool-calling as of this writing — OpenRouter's free model
-  // lineup churns, so if one 404s as "unavailable for free" later, check
-  // https://openrouter.ai/api/v1/models for a current ":free" model with
-  // supported_parameters including "tools" and swap it in.
+
   {
-    id: "openrouter-nemotron",
-    url: "https://openrouter.ai/api/v1/chat/completions",
-    model: "nvidia/nemotron-3-super-120b-a12b:free",
-    apiKey: process.env.OPENROUTER_KEY,
-  },
-  {
-    id: "openrouter-gpt-oss",
-    url: "https://openrouter.ai/api/v1/chat/completions",
-    model: "openai/gpt-oss-20b:free",
-    apiKey: process.env.OPENROUTER_KEY,
+    id: "huggingface",
+    url: "https://router.huggingface.co/v1/chat/completions",
+    model: "meta-llama/Llama-3.3-70B-Instruct:novita",
+    apiKey: process.env.HF_TOKEN,
   },
   {
     id: "gemini",
@@ -163,6 +153,14 @@ async function callProvider(provider: ProviderConfig, messages: unknown[]) {
       messages,
       tools: toolDefinitions,
       tool_choice: "auto",
+      // Forces one tool call per turn instead of several bundled into a single
+      // response. The free models this app relies on (Nemotron, gpt-oss, Gemini
+      // flash) are all unreliable specifically when asked to emit multiple/parallel
+      // tool calls at once — deterministic template/validation errors, not flaky
+      // ones, so retrying never helped. The tool-calling loop already handles one
+      // call per iteration fine, so this just spreads a multi-tool question (e.g.
+      // "give me financial advice") across a few turns instead of one crowded one.
+      parallel_tool_calls: false,
       temperature: 0.4,
     }),
   });
