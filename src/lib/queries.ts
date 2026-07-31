@@ -346,6 +346,9 @@ export async function getRecentTransactions(limit = 15): Promise<SerializedTrans
 export async function getAllTransactions(filter?: {
   accountId?: string;
   categoryId?: string;
+  entryType?: string;
+  from?: Date;
+  to?: Date;
 }): Promise<SerializedTransaction[]> {
   const [transactions, accounts] = await Promise.all([
     prisma.transaction.findMany({
@@ -379,6 +382,9 @@ export async function getAllTransactions(filter?: {
       return false;
     }
     if (filter?.categoryId && tx.categoryId !== filter.categoryId) return false;
+    if (filter?.entryType && tx.entryType !== filter.entryType) return false;
+    if (filter?.from && tx.date < filter.from) return false;
+    if (filter?.to && tx.date > filter.to) return false;
     return true;
   });
 

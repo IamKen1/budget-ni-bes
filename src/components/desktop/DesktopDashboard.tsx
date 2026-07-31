@@ -14,6 +14,8 @@ export function DesktopDashboard({
   view,
   cutoff,
   periodLabel,
+  periodStart,
+  periodEnd,
   totalBalance,
   income,
   expense,
@@ -27,6 +29,8 @@ export function DesktopDashboard({
   view: "cutoff" | "month";
   cutoff: string;
   periodLabel: string;
+  periodStart: string;
+  periodEnd: string;
   totalBalance: number;
   income: number;
   expense: number;
@@ -44,6 +48,8 @@ export function DesktopDashboard({
           view={view}
           cutoff={cutoff}
           periodLabel={periodLabel}
+          periodStart={periodStart}
+          periodEnd={periodEnd}
           totalBalance={totalBalance}
           income={income}
           expense={expense}

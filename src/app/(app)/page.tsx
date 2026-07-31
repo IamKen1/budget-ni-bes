@@ -69,6 +69,8 @@ export default async function DashboardPage({
         view={view}
         cutoff={cutoff}
         periodLabel={period.label}
+        periodStart={period.start.toISOString()}
+        periodEnd={period.end.toISOString()}
         totalBalance={totalBalance}
         income={summary.income}
         expense={summary.expense}
@@ -153,14 +155,20 @@ export default async function DashboardPage({
           <MaskableAmount value={totalBalance} />
         </p>
         <div className="mt-3 flex gap-4 text-xs">
-          <div>
-            <p className="text-emerald-100">Income</p>
+          <Link
+            href={`/transactions?entryType=INCOME&from=${period.start.toISOString()}&to=${period.end.toISOString()}&label=${encodeURIComponent(`Deposits — ${period.label}`)}`}
+            className="active:opacity-70"
+          >
+            <p className="text-emerald-100 underline decoration-emerald-100/40 underline-offset-2">Deposits</p>
             <p className="font-semibold"><MaskableAmount value={summary.income} /></p>
-          </div>
-          <div>
-            <p className="text-emerald-100">Expenses</p>
+          </Link>
+          <Link
+            href={`/transactions?entryType=EXPENSE&from=${period.start.toISOString()}&to=${period.end.toISOString()}&label=${encodeURIComponent(`Expenses — ${period.label}`)}`}
+            className="active:opacity-70"
+          >
+            <p className="text-emerald-100 underline decoration-emerald-100/40 underline-offset-2">Expenses</p>
             <p className="font-semibold"><MaskableAmount value={summary.expense} /></p>
-          </div>
+          </Link>
           <div>
             <p className="text-emerald-100">Saved</p>
             <p className="font-semibold"><MaskableAmount value={summary.saved} /></p>

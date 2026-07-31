@@ -26,6 +26,8 @@ export function DesktopSidebar({
   view,
   cutoff,
   periodLabel,
+  periodStart,
+  periodEnd,
   totalBalance,
   income,
   expense,
@@ -38,6 +40,8 @@ export function DesktopSidebar({
   view: "cutoff" | "month";
   cutoff: string;
   periodLabel: string;
+  periodStart: string;
+  periodEnd: string;
   totalBalance: number;
   income: number;
   expense: number;
@@ -125,14 +129,20 @@ export function DesktopSidebar({
           <MaskableAmount value={totalBalance} />
         </p>
         <div className="mt-1.5 flex gap-3 text-[10px]">
-          <div>
-            <p className="text-emerald-100">Income</p>
+          <Link
+            href={`/transactions?entryType=INCOME&from=${periodStart}&to=${periodEnd}&label=${encodeURIComponent(`Deposits — ${periodLabel}`)}`}
+            className="active:opacity-70"
+          >
+            <p className="text-emerald-100 underline decoration-emerald-100/40 underline-offset-2">Deposits</p>
             <p className="font-semibold"><MaskableAmount value={income} /></p>
-          </div>
-          <div>
-            <p className="text-emerald-100">Expenses</p>
+          </Link>
+          <Link
+            href={`/transactions?entryType=EXPENSE&from=${periodStart}&to=${periodEnd}&label=${encodeURIComponent(`Expenses — ${periodLabel}`)}`}
+            className="active:opacity-70"
+          >
+            <p className="text-emerald-100 underline decoration-emerald-100/40 underline-offset-2">Expenses</p>
             <p className="font-semibold"><MaskableAmount value={expense} /></p>
-          </div>
+          </Link>
           <div>
             <p className="text-emerald-100">Saved</p>
             <p className="font-semibold"><MaskableAmount value={saved} /></p>

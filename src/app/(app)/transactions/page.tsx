@@ -8,12 +8,26 @@ import { LoggedToast } from "@/components/LoggedToast";
 export default async function TransactionsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ logged?: string; accountId?: string; categoryId?: string }>;
+  searchParams: Promise<{
+    logged?: string;
+    accountId?: string;
+    categoryId?: string;
+    entryType?: string;
+    from?: string;
+    to?: string;
+    label?: string;
+  }>;
 }) {
-  const { logged, accountId, categoryId } = await searchParams;
+  const { logged, accountId, categoryId, entryType, from, to, label } = await searchParams;
 
   const [transactions, filterAccount, filterCategory] = await Promise.all([
-    getAllTransactions({ accountId, categoryId }),
+    getAllTransactions({
+      accountId,
+      categoryId,
+      entryType,
+      from: from ? new Date(from) : undefined,
+      to: to ? new Date(to) : undefined,
+    }),
     accountId ? prisma.account.findUnique({ where: { id: accountId } }) : null,
     categoryId ? prisma.category.findUnique({ where: { id: categoryId } }) : null,
   ]);
@@ -26,7 +40,7 @@ export default async function TransactionsPage({
     groups.set(key, list);
   }
 
-  const filterLabel = filterAccount?.name ?? filterCategory?.name ?? null;
+  const filterLabel = label ?? filterAccount?.name ?? filterCategory?.name ?? null;
 
   return (
     <div className="flex flex-col gap-4 pb-4 lg:mx-auto lg:max-w-lg lg:px-4 lg:pt-6">
