@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getRecentActivity } from "@/lib/actions/activity";
 import { ActivityRow } from "@/components/ActivityRow";
 import { ClearDataForm } from "@/components/ClearDataForm";
+import { ScanSheetButton } from "@/components/ScanSheetButton";
 
 export default async function SettingsPage({
   searchParams,
@@ -65,6 +66,16 @@ export default async function SettingsPage({
             </Link>
           </div>
         )}
+      </section>
+
+      <section>
+        <h2 className="px-1 pb-2 text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+          Resync from Sheet
+        </h2>
+        <p className="px-1 pb-2 text-xs text-zinc-400">
+          Check your JenKen Family.xlsx against what's logged here — shows what's different, doesn't change anything automatically.
+        </p>
+        <ScanSheetButton />
       </section>
 
       <section>
