@@ -99,6 +99,7 @@ async function undoAccount(log: { entityId: string; action: Action; before: unkn
     archived: d.archived,
     sortOrder: d.sortOrder,
     monthlyTarget: d.monthlyTarget,
+    openingBalance: d.openingBalance,
   };
   if (log.action === "DELETE") {
     await prisma.account.create({ data: { id: log.entityId, ...data } });

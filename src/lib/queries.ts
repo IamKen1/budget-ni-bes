@@ -50,10 +50,17 @@ export function cutoffRange(reference: Date = new Date()): DateRange {
   };
 }
 
-export type SerializedAccount = Omit<Account, "monthlyTarget"> & { monthlyTarget: number };
+export type SerializedAccount = Omit<Account, "monthlyTarget" | "openingBalance"> & {
+  monthlyTarget: number;
+  openingBalance: number;
+};
 
 function serializeAccount(account: Account): SerializedAccount {
-  return { ...account, monthlyTarget: toNumber(account.monthlyTarget) };
+  return {
+    ...account,
+    monthlyTarget: toNumber(account.monthlyTarget),
+    openingBalance: toNumber(account.openingBalance),
+  };
 }
 
 export async function getAccountsWithBalances(): Promise<
@@ -68,7 +75,7 @@ export async function getAccountsWithBalances(): Promise<
   ]);
 
   const balances = new Map<string, number>();
-  for (const account of accounts) balances.set(account.id, 0);
+  for (const account of accounts) balances.set(account.id, toNumber(account.openingBalance));
 
   for (const tx of transactions) {
     const amount = toNumber(tx.amount);
@@ -131,7 +138,7 @@ export async function getMonthlyAccountBalanceHistory(): Promise<{
   }
 
   const running = new Map<string, number>();
-  for (const a of accounts) running.set(a.id, 0);
+  for (const a of accounts) running.set(a.id, toNumber(a.openingBalance));
 
   const apply = (tx: (typeof transactions)[number]) => {
     const amount = toNumber(tx.amount);
@@ -340,15 +347,18 @@ export async function getAllTransactions(filter?: {
   accountId?: string;
   categoryId?: string;
 }): Promise<SerializedTransaction[]> {
-  const transactions = await prisma.transaction.findMany({
-    orderBy: [{ date: "asc" }, { createdAt: "asc" }],
-    include: { account: true, category: true, toAccount: true },
-  });
+  const [transactions, accounts] = await Promise.all([
+    prisma.transaction.findMany({
+      orderBy: [{ date: "asc" }, { createdAt: "asc" }],
+      include: { account: true, category: true, toAccount: true },
+    }),
+    prisma.account.findMany(),
+  ]);
 
   // Running balance is per-account (like a real bank statement line), computed
   // over the full, unfiltered history in date order, then read back out for
   // each transaction's own account — not one blended total across accounts.
-  const balances = new Map<string, number>();
+  const balances = new Map<string, number>(accounts.map((a) => [a.id, toNumber(a.openingBalance)]));
   const balanceOf = (id: string) => balances.get(id) ?? 0;
 
   const withBalance = transactions.map((tx) => {

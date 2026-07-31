@@ -7,9 +7,11 @@ import { useUndoToast } from "@/components/ToastContext";
 export function EditAccountTarget({
   accountId,
   monthlyTarget,
+  openingBalance,
 }: {
   accountId: string;
   monthlyTarget: number;
+  openingBalance: number;
 }) {
   const [open, setOpen] = useState(false);
   const { showUndo } = useUndoToast();
@@ -33,7 +35,7 @@ export function EditAccountTarget({
         if (result?.activityId) showUndo(result.activityId, "Target updated");
         setOpen(false);
       }}
-      className="flex items-center gap-2"
+      className="flex flex-wrap items-center gap-2"
     >
       <input type="hidden" name="id" value={accountId} />
       <input
@@ -43,6 +45,16 @@ export function EditAccountTarget({
         min="0"
         step="0.01"
         placeholder="Monthly target"
+        className="w-28 rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-xs outline-none focus:border-emerald-500 dark:border-zinc-800 dark:bg-zinc-950"
+      />
+      <input
+        type="number"
+        name="openingBalance"
+        defaultValue={openingBalance}
+        min="0"
+        step="0.01"
+        placeholder="Opening balance"
+        title="Starting balance for this account, e.g. money it already held before you started tracking it here — doesn't count as income for any period."
         className="w-28 rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-xs outline-none focus:border-emerald-500 dark:border-zinc-800 dark:bg-zinc-950"
       />
       <button

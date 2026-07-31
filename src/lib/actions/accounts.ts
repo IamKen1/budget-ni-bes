@@ -123,12 +123,14 @@ export async function moveAccount(id: string, direction: "up" | "down") {
 const targetSchema = z.object({
   id: z.string().min(1),
   monthlyTarget: z.coerce.number().min(0),
+  openingBalance: z.coerce.number().min(0).optional(),
 });
 
 export async function updateAccountTarget(formData: FormData) {
   const parsed = targetSchema.parse({
     id: formData.get("id"),
     monthlyTarget: formData.get("monthlyTarget"),
+    openingBalance: formData.get("openingBalance") || undefined,
   });
 
   const before = await prisma.account.findUnique({ where: { id: parsed.id } });
@@ -136,7 +138,10 @@ export async function updateAccountTarget(formData: FormData) {
 
   const account = await prisma.account.update({
     where: { id: parsed.id },
-    data: { monthlyTarget: parsed.monthlyTarget },
+    data: {
+      monthlyTarget: parsed.monthlyTarget,
+      ...(parsed.openingBalance !== undefined ? { openingBalance: parsed.openingBalance } : {}),
+    },
   });
 
   const activity = await recordActivity({

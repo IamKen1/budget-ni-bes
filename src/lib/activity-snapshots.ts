@@ -32,6 +32,7 @@ export function accountSnapshot(a: {
   archived: boolean;
   sortOrder: number;
   monthlyTarget: unknown;
+  openingBalance: unknown;
 }) {
   return {
     name: a.name,
@@ -39,6 +40,7 @@ export function accountSnapshot(a: {
     archived: a.archived,
     sortOrder: a.sortOrder,
     monthlyTarget: toNumber(a.monthlyTarget),
+    openingBalance: toNumber(a.openingBalance),
   };
 }
 

@@ -58,6 +58,12 @@ model Account {
   /// Monthly budget deposit target for this account (e.g. salary budgeted into
   /// the spending account each month). 0 = no target set.
   monthlyTarget Decimal @default(0) @db.Decimal(12, 2)
+  /// Starting balance for this account as of when it was added to the app —
+  /// added to the running total from real transactions, so an account that
+  /// already held money doesn't need a fake INCOME transaction to seed it
+  /// (which would otherwise wrongly count as income for whatever period it's
+  /// dated in). 0 = account started at zero.
+  openingBalance Decimal @default(0) @db.Decimal(12, 2)
 
   transactions Transaction[] @relation("AccountTransactions")
   transfersTo  Transaction[] @relation("TransferDestination")

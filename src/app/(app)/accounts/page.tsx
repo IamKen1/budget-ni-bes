@@ -68,7 +68,11 @@ export default async function AccountsPage() {
               )}
 
               <div className="mt-2 flex items-center justify-between">
-                <EditAccountTarget accountId={account.id} monthlyTarget={account.monthlyTarget} />
+                <EditAccountTarget
+                  accountId={account.id}
+                  monthlyTarget={account.monthlyTarget}
+                  openingBalance={account.openingBalance}
+                />
                 <ArchiveToggleButton
                   id={account.id}
                   archived={account.archived}

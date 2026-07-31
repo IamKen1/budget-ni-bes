@@ -186,7 +186,7 @@ export function DesktopSidebar({
                   {a.name} <span className="text-zinc-400">· {accountTypeLabel[a.type]}</span>
                 </p>
                 <div className="mt-1 flex items-center justify-between gap-1">
-                  <EditAccountTarget accountId={a.id} monthlyTarget={a.monthlyTarget} />
+                  <EditAccountTarget accountId={a.id} monthlyTarget={a.monthlyTarget} openingBalance={a.openingBalance} />
                   <ArchiveToggleButton id={a.id} archived={a.archived} toggleAction={toggleArchiveAccount} />
                 </div>
               </div>

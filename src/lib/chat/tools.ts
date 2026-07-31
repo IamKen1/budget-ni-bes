@@ -221,6 +221,10 @@ export const toolDefinitions = [
             description: "Required for create.",
           },
           monthlyTarget: { type: "number", description: "Required for set_target." },
+          openingBalance: {
+            type: "number",
+            description: "Optional, create only. If the account already holds money before being added here (e.g. an existing bank account with a real balance), set this to that starting amount so it's reflected immediately. Never log a fake INCOME transaction to seed a balance — use this field instead, it doesn't count as income for any period.",
+          },
         },
         required: ["action", "name"],
       },
@@ -693,6 +697,7 @@ async function toolManageAccount(args: {
   name: string;
   type?: "BANK" | "CASH" | "EWALLET";
   monthlyTarget?: number;
+  openingBalance?: number;
 }) {
   if (args.action === "create") {
     if (!args.type) return { error: "Need an account type (BANK, CASH, or EWALLET) to create an account." };
@@ -700,7 +705,9 @@ async function toolManageAccount(args: {
     if (existing) return { error: `An account matching "${args.name}" already exists: "${existing.name}".` };
 
     const count = await prisma.account.count();
-    const account = await prisma.account.create({ data: { name: args.name, type: args.type, sortOrder: count } });
+    const account = await prisma.account.create({
+      data: { name: args.name, type: args.type, sortOrder: count, openingBalance: args.openingBalance ?? 0 },
+    });
     const activity = await recordActivity({
       entity: "ACCOUNT",
       action: "CREATE",
