@@ -5,7 +5,7 @@ import type {
   LoanPaymentMonthGroup,
 } from "@/lib/queries";
 import { DesktopSidebar } from "@/components/desktop/DesktopSidebar";
-import { QuickAddTransactionForm } from "@/components/desktop/QuickAddTransactionForm";
+import { AddTransactionButton } from "@/components/desktop/AddTransactionButton";
 import { DesktopTransactionPanel } from "@/components/desktop/DesktopTransactionPanel";
 import { DesktopFilterProvider } from "@/components/desktop/DesktopFilterContext";
 import { SpecialDayBanner } from "@/components/SpecialDayBanner";
@@ -63,7 +63,7 @@ export function DesktopDashboard({
           <div className="px-6 pt-6">
             <SpecialDayBanner />
           </div>
-          <QuickAddTransactionForm accounts={accounts} categories={[...expenseCategories, ...savingsCategories]} />
+          <AddTransactionButton accounts={accounts} categories={[...expenseCategories, ...savingsCategories]} />
           <DesktopTransactionPanel transactions={transactions} />
         </main>
       </div>
