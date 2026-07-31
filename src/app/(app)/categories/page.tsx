@@ -21,7 +21,7 @@ export default async function CategoriesPage({
   const { view: viewParam } = await searchParams;
   const view = viewParam === "month" ? "month" : "cutoff";
   const period = view === "month" ? monthRange() : cutoffRange();
-  const targetScope = view === "month" ? "month" : dayjs().date() <= 15 ? "first-half" : "second-half";
+  const targetScope = view === "month" ? "month" : dayjs().date() <= 14 ? "first-half" : "second-half";
 
   const [expenseCategories, savingsCategories] = await Promise.all([
     getExpenseCategoriesWithProgress(period, targetScope),

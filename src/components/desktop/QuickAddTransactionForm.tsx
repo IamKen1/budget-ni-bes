@@ -40,6 +40,7 @@ export function QuickAddTransactionForm({
   const [entryType, setEntryType] = useState<EntryType>("EXPENSE");
   const [person, setPerson] = useState<Person>("SHARED");
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
+  const [isSalaryIncome, setIsSalaryIncome] = useState(false);
   const [isPending, startTransition] = useTransition();
   const { showUndo } = useUndoToast();
 
@@ -66,6 +67,7 @@ export function QuickAddTransactionForm({
             formRef.current?.reset();
             setEntryType("EXPENSE");
             setPerson("SHARED");
+            setIsSalaryIncome(false);
           }
         });
       }}
@@ -73,6 +75,7 @@ export function QuickAddTransactionForm({
     >
       <input type="hidden" name="entryType" value={entryType} />
       <input type="hidden" name="person" value={person} />
+      {entryType === "INCOME" && isSalaryIncome && <input type="hidden" name="isSalaryIncome" value="true" />}
 
       <div className="flex flex-wrap items-center gap-1.5">
         {entryTypeOptions.map((opt) => (
@@ -90,6 +93,20 @@ export function QuickAddTransactionForm({
           </button>
         ))}
         <div className="mx-1 h-4 w-px bg-zinc-200 dark:bg-zinc-800" />
+        {entryType === "INCOME" && (
+          <button
+            type="button"
+            onClick={() => setIsSalaryIncome((v) => !v)}
+            title="Counts toward Deposits on the dashboard if checked"
+            className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition ${
+              isSalaryIncome
+                ? "bg-emerald-600 text-white"
+                : "bg-zinc-100 text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300"
+            }`}
+          >
+            {isSalaryIncome ? "✓ Salary" : "Salary?"}
+          </button>
+        )}
         {personOptions.map((opt) => (
           <button
             key={opt.value}

@@ -111,6 +111,9 @@ function TransactionDetailBody({
               {transaction.toAccount && <Row label="To Account" value={transaction.toAccount.name} />}
               {transaction.category && <Row label="Category" value={transaction.category.name} />}
               <Row label="Who" value={personLabel[transaction.person]} />
+              {transaction.entryType === "INCOME" && (
+                <Row label="Salary?" value={transaction.isSalaryIncome ? "Yes — counts as Deposits" : "No"} />
+              )}
               {transaction.particulars && <Row label="Note" value={transaction.particulars} />}
             </dl>
 
@@ -198,6 +201,7 @@ function EditForm({
   const [entryType, setEntryType] = useState<EntryType>(transaction.entryType as EntryType);
   const [person, setPerson] = useState<Person>(transaction.person);
   const [accountId, setAccountId] = useState(transaction.account.id);
+  const [isSalaryIncome, setIsSalaryIncome] = useState(transaction.isSalaryIncome);
 
   if (!options) {
     return <p className="mt-6 py-8 text-center text-sm text-zinc-400">Loading…</p>;
@@ -217,6 +221,7 @@ function EditForm({
       <input type="hidden" name="id" value={transaction.id} />
       <input type="hidden" name="entryType" value={entryType} />
       <input type="hidden" name="person" value={person} />
+      {entryType === "INCOME" && isSalaryIncome && <input type="hidden" name="isSalaryIncome" value="true" />}
 
       <div className="grid grid-cols-3 gap-2">
         {entryTypeOptions.map((opt) => (
@@ -334,6 +339,18 @@ function EditForm({
           className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-500 dark:border-zinc-800 dark:bg-zinc-900"
         />
       </Field>
+
+      {entryType === "INCOME" && (
+        <label className="flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm dark:border-zinc-800 dark:bg-zinc-900">
+          <input
+            type="checkbox"
+            checked={isSalaryIncome}
+            onChange={(e) => setIsSalaryIncome(e.target.checked)}
+            className="h-4 w-4 accent-emerald-600"
+          />
+          This is salary — counts toward "Deposits" on the dashboard
+        </label>
+      )}
 
       {error && <p className="text-xs font-medium text-red-500">{error}</p>}
 

@@ -115,6 +115,12 @@ model Transaction {
   categoryId String?
   category   Category? @relation(fields: [categoryId], references: [id])
 
+  /// Only meaningful when entryType is INCOME. True = actual salary landing in an
+  /// account. False covers everything else INCOME currently gets used for (interest,
+  /// reimbursements, savings withdrawn back into spending money, one-off adjustments) —
+  /// none of that is "Deposits" for dashboard purposes, only real salary is.
+  isSalaryIncome Boolean @default(false)
+
   toAccountId String?
   toAccount   Account? @relation("TransferDestination", fields: [toAccountId], references: [id])
 

@@ -25,26 +25,34 @@ export function monthRange(reference: Date = new Date()): DateRange {
  * full calendar month there, so this is only used for the "days left /
  * which cutoff we're in" hint, not for KPI aggregation.
  */
+// Labeled "1-15" / "16-end" (matching how the family names them in their own
+// spreadsheet), but day 15 itself actually belongs to the second bucket —
+// salary reliably lands ON the 15th and funds spending through month-end, per
+// the family's own ledger (day-15 entries are filed under "16-31 Cutoff" there)
+// and their stated rule: money received in a 16-31 cutoff funds the next
+// month's 1-15 spending, and money received in a 1-15 cutoff funds that same
+// month's 15-31 spending. So the real boundary is day <= 14 vs day >= 15.
 export function currentCutoffLabel(reference: Date = new Date()): string {
   const d = dayjs(reference);
-  return d.date() <= 15 ? `1-15` : `16-${d.endOf("month").format("D")}`;
+  return d.date() <= 14 ? `1-15` : `16-${d.endOf("month").format("D")}`;
 }
 
 /** The current semi-monthly cutoff period (1-15 or 16-end) as a DateRange, for
  * dashboards that want to scope KPIs to the current cutoff instead of the
- * full calendar month. See currentCutoffLabel for the underlying schedule. */
+ * full calendar month. See currentCutoffLabel for the underlying schedule and
+ * why day 15 itself is grouped into the second half despite the "1-15" label. */
 export function cutoffRange(reference: Date = new Date()): DateRange {
   const d = dayjs(reference);
   const monthLabel = d.format("MMMM");
-  if (d.date() <= 15) {
+  if (d.date() <= 14) {
     return {
       start: d.startOf("month").toDate(),
-      end: d.startOf("month").add(14, "day").endOf("day").toDate(),
+      end: d.startOf("month").add(13, "day").endOf("day").toDate(),
       label: `${monthLabel} 1-15`,
     };
   }
   return {
-    start: d.startOf("month").add(15, "day").toDate(),
+    start: d.startOf("month").add(14, "day").toDate(),
     end: d.endOf("month").toDate(),
     label: `${monthLabel} 16-${d.endOf("month").format("D")}`,
   };
@@ -274,7 +282,12 @@ export async function getPeriodSummary(range: DateRange = monthRange()) {
 
   for (const tx of transactions) {
     const amount = toNumber(tx.amount);
-    if (tx.entryType === "INCOME") income += amount;
+    // "Deposits" is deliberately narrower than every INCOME transaction — it's
+    // only real salary landing in an account. Interest, reimbursements, savings
+    // withdrawn back into spending money, and one-off balance adjustments are
+    // all logged as INCOME too (for correct account balances) but aren't what
+    // the family means by "Deposits", so they're excluded here.
+    if (tx.entryType === "INCOME" && tx.isSalaryIncome) income += amount;
     if (tx.entryType === "EXPENSE") expense += amount;
     if (tx.entryType === "SAVINGS_DEPOSIT") saved += amount;
     if (tx.entryType === "SAVINGS_WITHDRAW") saved -= amount;

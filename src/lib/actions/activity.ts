@@ -79,6 +79,7 @@ async function undoTransaction(log: {
     accountId: d.accountId,
     categoryId: d.categoryId,
     toAccountId: d.toAccountId,
+    isSalaryIncome: d.isSalaryIncome,
   };
   if (log.action === "DELETE") {
     await prisma.transaction.create({ data: { id: log.entityId, ...data } });

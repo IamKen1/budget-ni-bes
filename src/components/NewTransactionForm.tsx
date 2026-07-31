@@ -184,6 +184,13 @@ export function NewTransactionForm({
             className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-emerald-500 dark:border-zinc-800 dark:bg-zinc-900"
           />
         </Field>
+
+        {entryType === "INCOME" && (
+          <label className="flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm dark:border-zinc-800 dark:bg-zinc-900">
+            <input type="checkbox" name="isSalaryIncome" value="true" className="h-4 w-4 accent-emerald-600" />
+            This is salary — counts toward "Deposits" on the dashboard (leave unchecked for interest, reimbursements, or other one-off deposits)
+          </label>
+        )}
       </div>
 
       <button

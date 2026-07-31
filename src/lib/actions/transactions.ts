@@ -17,6 +17,7 @@ const transactionSchema = z.object({
   accountId: z.string().min(1),
   categoryId: z.string().optional(),
   toAccountId: z.string().optional(),
+  isSalaryIncome: z.coerce.boolean().optional(),
 });
 
 async function insertTransaction(formData: FormData) {
@@ -29,6 +30,7 @@ async function insertTransaction(formData: FormData) {
     accountId: formData.get("accountId"),
     categoryId: formData.get("categoryId") || undefined,
     toAccountId: formData.get("toAccountId") || undefined,
+    isSalaryIncome: formData.get("isSalaryIncome") || undefined,
   });
 
   const tx = await prisma.transaction.create({
@@ -41,6 +43,7 @@ async function insertTransaction(formData: FormData) {
       accountId: parsed.accountId,
       categoryId: parsed.entryType === "TRANSFER" ? null : parsed.categoryId || null,
       toAccountId: parsed.entryType === "TRANSFER" ? parsed.toAccountId || null : null,
+      isSalaryIncome: parsed.entryType === "INCOME" ? (parsed.isSalaryIncome ?? false) : false,
     },
   });
 
@@ -88,6 +91,7 @@ export async function updateTransactionFields(formData: FormData) {
     accountId: formData.get("accountId"),
     categoryId: formData.get("categoryId") || undefined,
     toAccountId: formData.get("toAccountId") || undefined,
+    isSalaryIncome: formData.get("isSalaryIncome") || undefined,
   });
   if (!parsed.success) return { error: "Please fill in a valid amount and account." };
   const data = parsed.data;
@@ -106,6 +110,7 @@ export async function updateTransactionFields(formData: FormData) {
       accountId: data.accountId,
       categoryId: data.entryType === "TRANSFER" ? null : data.categoryId || null,
       toAccountId: data.entryType === "TRANSFER" ? data.toAccountId || null : null,
+      isSalaryIncome: data.entryType === "INCOME" ? (data.isSalaryIncome ?? false) : false,
     },
   });
 

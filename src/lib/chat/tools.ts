@@ -113,6 +113,11 @@ export const toolDefinitions = [
             type: "string",
             description: "Category name for EXPENSE or SAVINGS entries, e.g. 'Grocery', 'Jen CC', 'Emergency Fund'. Omit for INCOME. If you don't know it yet, omit it and ask the user first.",
           },
+          isSalaryIncome: {
+            type: "boolean",
+            description:
+              "INCOME entries only. True if this is an actual salary deposit (e.g. 'Budget from Salary', 'sahod'). False for everything else logged as INCOME — bank interest, someone paying you back (reimbursements), savings withdrawn back into spending money, or any other one-off deposit. The dashboard's \"Deposits\" figure only counts entries marked true here, so get this right — if it's genuinely ambiguous whether something is salary, ask rather than guess.",
+          },
           learnKeyword: {
             type: "string",
             description:
@@ -431,6 +436,7 @@ async function toolLogTransaction(args: {
   person?: "JENNA" | "KENNETH" | "SHARED";
   note?: string;
   date?: string;
+  isSalaryIncome?: boolean;
 }) {
   if (!args.amount || args.amount <= 0) {
     return { error: "Amount must be a positive number." };
@@ -503,6 +509,7 @@ async function toolLogTransaction(args: {
       particulars: args.note ?? null,
       accountId: account.id,
       categoryId,
+      isSalaryIncome: args.entryType === "INCOME" ? (args.isSalaryIncome ?? false) : false,
     },
     include: { category: true, account: true },
   });
