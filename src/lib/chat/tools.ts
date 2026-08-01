@@ -186,6 +186,11 @@ export const toolDefinitions = [
           person: { type: "string", enum: ["JENNA", "KENNETH", "SHARED"] },
           note: { type: "string" },
           date: { type: "string", description: "YYYY-MM-DD" },
+          periodOverride: {
+            type: "string",
+            description:
+              "YYYY-MM-DD, optional. Sets which cutoff/month this counts toward, independent of the real date — e.g. salary landing on the last day of a cutoff but meant to fund the next one's spending. Leave the real date alone (it should always match what actually happened, e.g. matches the family's spreadsheet); only set this when the user is explicitly saying 'this counts toward next cutoff' or similar. Pass an empty string to clear an existing override.",
+          },
         },
         required: ["id"],
       },
@@ -632,6 +637,7 @@ async function toolUpdateTransaction(args: {
   person?: "JENNA" | "KENNETH" | "SHARED";
   note?: string;
   date?: string;
+  periodOverride?: string;
 }) {
   const existing = await prisma.transaction.findUnique({
     where: { id: args.id },
@@ -647,6 +653,7 @@ async function toolUpdateTransaction(args: {
   if (args.entryType) data.entryType = args.entryType;
   if (args.note !== undefined) data.particulars = args.note;
   if (args.date) data.date = new Date(args.date);
+  if (args.periodOverride !== undefined) data.periodOverride = args.periodOverride ? new Date(args.periodOverride) : null;
   if (args.accountName) {
     const account = await resolveAccount(args.accountName);
     if (!account) return { error: `No account found matching "${args.accountName}".` };

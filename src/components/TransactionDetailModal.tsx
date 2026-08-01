@@ -114,6 +114,9 @@ function TransactionDetailBody({
               {transaction.entryType === "INCOME" && (
                 <Row label="Salary?" value={transaction.isSalaryIncome ? "Yes — counts as Deposits" : "No"} />
               )}
+              {transaction.periodOverride && (
+                <Row label="Counts toward" value={formatDateFull(transaction.periodOverride)} />
+              )}
               {transaction.particulars && <Row label="Note" value={transaction.particulars} />}
             </dl>
 
@@ -202,6 +205,7 @@ function EditForm({
   const [person, setPerson] = useState<Person>(transaction.person);
   const [accountId, setAccountId] = useState(transaction.account.id);
   const [isSalaryIncome, setIsSalaryIncome] = useState(transaction.isSalaryIncome);
+  const [showPeriodOverride, setShowPeriodOverride] = useState(!!transaction.periodOverride);
 
   if (!options) {
     return <p className="mt-6 py-8 text-center text-sm text-zinc-400">Loading…</p>;
@@ -350,6 +354,37 @@ function EditForm({
           />
           This is salary — counts toward "Deposits" on the dashboard
         </label>
+      )}
+
+      {showPeriodOverride ? (
+        <Field label="Counts toward this cutoff/month instead (optional)">
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              name="periodOverride"
+              defaultValue={transaction.periodOverride ? toDateInputValue(transaction.periodOverride) : ""}
+              className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-500 dark:border-zinc-800 dark:bg-zinc-900"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPeriodOverride(false)}
+              className="flex-shrink-0 text-xs font-medium text-zinc-400"
+            >
+              Clear
+            </button>
+          </div>
+          <p className="px-1 pt-1 text-[11px] text-zinc-400">
+            Date stays the same for the real record — this only changes which cutoff/month it's counted in (e.g. salary landing on the last day of a cutoff but meant to fund the next one).
+          </p>
+        </Field>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setShowPeriodOverride(true)}
+          className="self-start text-xs font-medium text-emerald-600 dark:text-emerald-400"
+        >
+          + Counts toward a different cutoff/month
+        </button>
       )}
 
       {error && <p className="text-xs font-medium text-red-500">{error}</p>}

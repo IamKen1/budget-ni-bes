@@ -18,6 +18,7 @@ const transactionSchema = z.object({
   categoryId: z.string().optional(),
   toAccountId: z.string().optional(),
   isSalaryIncome: z.coerce.boolean().optional(),
+  periodOverride: z.string().optional(),
 });
 
 async function insertTransaction(formData: FormData) {
@@ -31,6 +32,7 @@ async function insertTransaction(formData: FormData) {
     categoryId: formData.get("categoryId") || undefined,
     toAccountId: formData.get("toAccountId") || undefined,
     isSalaryIncome: formData.get("isSalaryIncome") || undefined,
+    periodOverride: formData.get("periodOverride") || undefined,
   });
 
   const tx = await prisma.transaction.create({
@@ -44,6 +46,7 @@ async function insertTransaction(formData: FormData) {
       categoryId: parsed.entryType === "TRANSFER" ? null : parsed.categoryId || null,
       toAccountId: parsed.entryType === "TRANSFER" ? parsed.toAccountId || null : null,
       isSalaryIncome: parsed.entryType === "INCOME" ? (parsed.isSalaryIncome ?? false) : false,
+      periodOverride: parsed.periodOverride ? new Date(parsed.periodOverride) : null,
     },
   });
 
@@ -92,6 +95,7 @@ export async function updateTransactionFields(formData: FormData) {
     categoryId: formData.get("categoryId") || undefined,
     toAccountId: formData.get("toAccountId") || undefined,
     isSalaryIncome: formData.get("isSalaryIncome") || undefined,
+    periodOverride: formData.get("periodOverride") || undefined,
   });
   if (!parsed.success) return { error: "Please fill in a valid amount and account." };
   const data = parsed.data;
@@ -111,6 +115,7 @@ export async function updateTransactionFields(formData: FormData) {
       categoryId: data.entryType === "TRANSFER" ? null : data.categoryId || null,
       toAccountId: data.entryType === "TRANSFER" ? data.toAccountId || null : null,
       isSalaryIncome: data.entryType === "INCOME" ? (data.isSalaryIncome ?? false) : false,
+      periodOverride: data.periodOverride ? new Date(data.periodOverride) : null,
     },
   });
 

@@ -108,10 +108,6 @@ Style:
 - This chat only renders plain text, not markdown — never use **bold**, tables (| like | this |), headers (#), or any other markdown syntax, since the symbols themselves would show up literally on screen instead of being styled. For emphasis just say the number or word plainly, or lead with it. Never output HTML, XML, or markup-style tags (e.g. no <result>, <div>, or similar) either.
 - Whenever you list more than one item (transactions to pick from, a category-by-category allocation, several tips), put each item on its own line — a real newline between them, numbered or with a short dash — never run them together as one long sentence separated by commas, and never as a markdown table. A wall of text is hard to read on a phone; a short list is not.`;
 
-// An ordered chain of OpenAI-compatible providers/models, all free tier, tried in
-// order until one answers. More entries = more daily runway for zero cost, since each
-// is its own separately-metered quota. Order is fastest/most-generous first, tiniest
-// quota (Gemini, 20 req/day) last so it's only ever used as a last resort.
 type ProviderConfig = {
   id: string;
   url: string;

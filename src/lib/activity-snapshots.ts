@@ -14,6 +14,7 @@ export function transactionSnapshot(tx: {
   categoryId: string | null;
   toAccountId: string | null;
   isSalaryIncome: boolean;
+  periodOverride: Date | null;
 }) {
   return {
     date: tx.date.toISOString(),
@@ -25,6 +26,7 @@ export function transactionSnapshot(tx: {
     categoryId: tx.categoryId,
     toAccountId: tx.toAccountId,
     isSalaryIncome: tx.isSalaryIncome,
+    periodOverride: tx.periodOverride ? tx.periodOverride.toISOString() : null,
   };
 }
 

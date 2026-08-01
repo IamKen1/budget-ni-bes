@@ -80,6 +80,7 @@ async function undoTransaction(log: {
     categoryId: d.categoryId,
     toAccountId: d.toAccountId,
     isSalaryIncome: d.isSalaryIncome,
+    periodOverride: d.periodOverride ? new Date(d.periodOverride) : null,
   };
   if (log.action === "DELETE") {
     await prisma.transaction.create({ data: { id: log.entityId, ...data } });

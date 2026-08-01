@@ -121,6 +121,14 @@ model Transaction {
   /// none of that is "Deposits" for dashboard purposes, only real salary is.
   isSalaryIncome Boolean @default(false)
 
+  /// Optional override for which cutoff/month this counts toward, independent of the
+  /// real `date` — mirrors the family's own spreadsheet, which keeps a literal Date
+  /// column separate from its Month/Cutoff labels. Used for things like salary that
+  /// lands on the last day of a cutoff but is meant to fund the *next* cutoff's
+  /// spending. `date` stays the real, accurate date (so it keeps matching the sheet
+  /// for reconciliation) — null means "same as date", the common case.
+  periodOverride DateTime?
+
   toAccountId String?
   toAccount   Account? @relation("TransferDestination", fields: [toAccountId], references: [id])
 

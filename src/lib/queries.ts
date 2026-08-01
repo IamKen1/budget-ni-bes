@@ -205,6 +205,14 @@ export type CategoryProgress = Omit<Category, "monthlyTarget" | "goalTarget" | "
   allTimeTotal: number;
 };
 
+// Which cutoff/month a transaction counts toward — periodOverride when set
+// (e.g. salary landing on the last day of a cutoff but meant for the next
+// one), otherwise its real date. Never used for balance/running-total math,
+// only for period-scoped summaries (Deposits, budget progress, etc).
+function effectiveDate(tx: { date: Date; periodOverride: Date | null }): Date {
+  return tx.periodOverride ?? tx.date;
+}
+
 export type TargetScope = "month" | "first-half" | "second-half";
 
 function periodTargetFor(scope: TargetScope, monthlyTarget: number, firstHalfTarget: number): number {
@@ -234,7 +242,8 @@ export async function getExpenseCategoriesWithProgress(
     for (const tx of transactions) {
       const amount = toNumber(tx.amount);
       allTimeTotal += amount;
-      if (tx.date >= start && tx.date <= end) periodTotal += amount;
+      const d = effectiveDate(tx);
+      if (d >= start && d <= end) periodTotal += amount;
     }
     const serialized = serializeCategory(category);
     const periodTarget = periodTargetFor(targetScope, serialized.monthlyTarget, serialized.firstHalfTarget);
@@ -263,7 +272,8 @@ export async function getSavingsCategoriesWithProgress(
       const amount = toNumber(tx.amount);
       const signed = tx.entryType === "SAVINGS_WITHDRAW" ? -amount : amount;
       allTimeTotal += signed;
-      if (tx.date >= start && tx.date <= end) periodTotal += signed;
+      const d = effectiveDate(tx);
+      if (d >= start && d <= end) periodTotal += signed;
     }
     const serialized = serializeCategory(category);
     return { ...serialized, periodTotal, allTimeTotal, periodTarget: serialized.monthlyTarget };
@@ -272,8 +282,11 @@ export async function getSavingsCategoriesWithProgress(
 
 export async function getPeriodSummary(range: DateRange = monthRange()) {
   const { start, end } = range;
+  // OR on periodOverride too — a transaction dated outside this range can still
+  // count toward it (or vice versa: dated inside but overridden elsewhere), so
+  // the DB fetch has to be a superset; effectiveDate() below decides for real.
   const transactions = await prisma.transaction.findMany({
-    where: { date: { gte: start, lte: end } },
+    where: { OR: [{ date: { gte: start, lte: end } }, { periodOverride: { gte: start, lte: end } }] },
   });
 
   let income = 0;
@@ -281,6 +294,8 @@ export async function getPeriodSummary(range: DateRange = monthRange()) {
   let saved = 0;
 
   for (const tx of transactions) {
+    const d = effectiveDate(tx);
+    if (d < start || d > end) continue;
     const amount = toNumber(tx.amount);
     // "Deposits" is deliberately narrower than every INCOME transaction — it's
     // only real salary landing in an account. Interest, reimbursements, savings
@@ -301,11 +316,16 @@ export async function getPersonSpendBreakdown(
 ): Promise<Record<Person, number>> {
   const { start, end } = range;
   const transactions = await prisma.transaction.findMany({
-    where: { entryType: "EXPENSE", date: { gte: start, lte: end } },
+    where: {
+      entryType: "EXPENSE",
+      OR: [{ date: { gte: start, lte: end } }, { periodOverride: { gte: start, lte: end } }],
+    },
   });
 
   const totals: Record<Person, number> = { JENNA: 0, KENNETH: 0, SHARED: 0 };
   for (const tx of transactions) {
+    const d = effectiveDate(tx);
+    if (d < start || d > end) continue;
     totals[tx.person] += toNumber(tx.amount);
   }
   return totals;
