@@ -4,7 +4,11 @@ import { formatMoney } from "@/lib/format";
 import {
   getAccountsWithBalances,
   getExpenseCategoriesWithProgress,
+  getLoanPaymentsByMonth,
   monthRange,
+  cutoffRange,
+  literalCutoffHalf,
+  type TargetScope,
 } from "@/lib/queries";
 import { recordActivity, clearAllTransactions } from "@/lib/actions/activity";
 import { transactionSnapshot, accountSnapshot, categorySnapshot } from "@/lib/activity-snapshots";
@@ -78,8 +82,18 @@ export const toolDefinitions = [
     function: {
       name: "get_budget_progress",
       description:
-        "Get this month's expense categories with their monthly target, how much has been spent so far, and how much is left.",
-      parameters: { type: "object", properties: {}, required: [] },
+        "Get expense categories with their target, how much has been spent so far, and how much is left — plus periodStart/periodEnd/periodLabel and a totalRemaining sum. Defaults to the CURRENT CUTOFF (the family's real semi-monthly budgeting period, e.g. 'ngayong cutoff') — pass period 'month' only if the user explicitly asks about the whole month. For any 'may sobra ba kami' / 'float money' / 'pwede pa ba gumastos' question, this is the starting point — see the system prompt's float-money rule for how to combine this with get_loan_payments correctly.",
+      parameters: {
+        type: "object",
+        properties: {
+          period: {
+            type: "string",
+            enum: ["cutoff", "month"],
+            description: "Defaults to 'cutoff' (the current 1-15 or 16-end period). Use 'month' only if explicitly asked about the full month.",
+          },
+        },
+        required: [],
+      },
     },
   },
   {
@@ -88,6 +102,15 @@ export const toolDefinitions = [
       name: "get_savings_progress",
       description:
         "Get every savings fund (Emergency Fund, Car Fund, Home Fund, Baby Fund, etc.) with its long-term goal target and current net balance. Use this — not get_balances — for any question about a specific fund's amount, e.g. 'magkano na yung emergency fund', 'how much is in Baby Fund'. Fund balances are NOT the same as account balances. Also already includes a projection (averageMonthlyNetSaved, estimatedMonthsToReachGoal, estimatedDateToReachGoal) based on the fund's actual saving pace since its first deposit — use those fields directly to answer 'when will we have enough for X' questions instead of trying to compute it yourself from other tools.",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_loan_payments",
+      description:
+        "Get the Loans / Upcoming Payments schedule — every recurring loan or bill installment (payee, due date, amount, remaining balance, paid status), grouped by due-date month. Use this for any question about loans, bills, or 'Upcoming Payments' — e.g. 'ano pa may utang tayo', 'magkano na natitira sa RCBC', 'anong bayarin ngayong buwan', 'may due ba this week'. Never invent loan/payee info — always call this first.",
       parameters: { type: "object", properties: {}, required: [] },
     },
   },
@@ -369,17 +392,55 @@ async function toolGetSpending(args: { period: Period; person?: string }) {
   };
 }
 
-async function toolGetBudgetProgress() {
-  const categories = await getExpenseCategoriesWithProgress(monthRange());
-  return categories
-    .filter((c) => c.monthlyTarget > 0 || c.periodTotal > 0)
+async function toolGetBudgetProgress(args?: { period?: "cutoff" | "month" }) {
+  const period = args?.period ?? "cutoff";
+  const range = period === "month" ? monthRange() : cutoffRange();
+  const targetScope: TargetScope =
+    period === "month" ? "month" : dayjs().date() <= 14 ? "first-half" : "second-half";
+
+  const categories = await getExpenseCategoriesWithProgress(range, targetScope);
+  const rows = categories
+    .filter((c) => c.periodTarget > 0 || c.periodTotal > 0)
     .map((c) => ({
       category: c.name,
-      target: c.monthlyTarget,
+      target: c.periodTarget,
       spent: c.periodTotal,
-      remaining: c.monthlyTarget - c.periodTotal,
-      overBudget: c.monthlyTarget > 0 && c.periodTotal > c.monthlyTarget,
+      remaining: c.periodTarget - c.periodTotal,
+      overBudget: c.periodTarget > 0 && c.periodTotal > c.periodTarget,
+      // e.g. Baon — this category's remaining budget WILL still go out before
+      // the cutoff ends (a guaranteed expense), not flexible/discretionary room.
+      isCommittedSpend: c.isCommittedSpend,
     }));
+
+  // Jen CC/Ken CC are excluded from totalRemaining/committedRemaining/
+  // flexibleRemaining entirely (not "committed", not "flexible" either) — their
+  // real obligation is the credit card balance itself, already captured via
+  // get_loan_payments, so counting their category remaining too would
+  // double-subtract the same debt. They still appear normally in `categories`
+  // below for per-category questions, just excluded from these float-money sums.
+  const floatRows = rows.filter((r) => r.category !== "Jen CC" && r.category !== "Ken CC");
+  const totalRemaining = floatRows.reduce((s, r) => s + r.remaining, 0);
+  const committedRemaining = floatRows.filter((r) => r.isCommittedSpend).reduce((s, r) => s + r.remaining, 0);
+
+  return {
+    period,
+    periodLabel: range.label,
+    periodStart: dayjs(range.start).format("YYYY-MM-DD"),
+    periodEnd: dayjs(range.end).format("YYYY-MM-DD"),
+    // Match this against get_loan_payments' dueCutoff field (both "1-15"/"16-31")
+    // to find loans due within the current cutoff — don't compare raw dates
+    // yourself, the boundary rule differs from periodStart/periodEnd above.
+    currentLoanCutoff: period === "cutoff" ? literalCutoffHalf(new Date()) : null,
+    totalTarget: rows.reduce((s, r) => s + r.target, 0),
+    totalSpent: rows.reduce((s, r) => s + r.spent, 0),
+    totalRemaining,
+    // totalRemaining still counting committed categories (e.g. Baon) as available.
+    // flexibleRemaining already has that subtracted — use THIS as the starting
+    // point for any "float money" / "sobra ba kami" question, not totalRemaining.
+    committedRemaining,
+    flexibleRemaining: totalRemaining - committedRemaining,
+    categories: rows,
+  };
 }
 
 async function toolGetSavingsProgress() {
@@ -430,6 +491,27 @@ async function toolGetSavingsProgress() {
           : null,
     };
   });
+}
+
+async function toolGetLoanPayments() {
+  const groups = await getLoanPaymentsByMonth();
+  return groups.map((g) => ({
+    month: g.label,
+    total: g.total,
+    remainingBalance: g.remainingBalance,
+    payments: g.payments.map((p) => ({
+      payee: p.payee,
+      dueDate: dayjs(p.dueDate).format("YYYY-MM-DD"),
+      dueCutoff: literalCutoffHalf(p.dueDate),
+      amount: p.amount,
+      remainingBalance: p.remainingBalance,
+      paid: p.paid,
+      person: p.person,
+      account: p.account.name,
+      category: p.category?.name ?? null,
+      note: p.particulars,
+    })),
+  }));
 }
 
 async function toolLogTransaction(args: {
@@ -928,9 +1010,11 @@ export async function executeTool(name: string, args: Record<string, unknown>) {
     case "get_spending":
       return toolGetSpending(args as { period: Period; person?: string });
     case "get_budget_progress":
-      return toolGetBudgetProgress();
+      return toolGetBudgetProgress(args as { period?: "cutoff" | "month" });
     case "get_savings_progress":
       return toolGetSavingsProgress();
+    case "get_loan_payments":
+      return toolGetLoanPayments();
     case "log_transaction":
       return toolLogTransaction(
         args as Parameters<typeof toolLogTransaction>[0]

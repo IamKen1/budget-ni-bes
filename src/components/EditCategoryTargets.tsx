@@ -9,15 +9,18 @@ export function EditCategoryTargets({
   monthlyTarget,
   goalTarget,
   firstHalfTarget,
+  isCommittedSpend,
   showGoal,
 }: {
   categoryId: string;
   monthlyTarget: number;
   goalTarget: number;
   firstHalfTarget?: number;
+  isCommittedSpend?: boolean;
   showGoal: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [committed, setCommitted] = useState(isCommittedSpend ?? false);
   const { showUndo } = useUndoToast();
 
   if (!open) {
@@ -75,6 +78,21 @@ export function EditCategoryTargets({
         />
       )}
       {!showGoal && <input type="hidden" name="goalTarget" value="0" />}
+      {firstHalfTarget !== undefined && (
+        <label
+          className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-2 py-1.5 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400"
+          title="Remaining budget here counts as a guaranteed future expense (like Baon) instead of flexible/discretionary room — subtracted from Bes AI's float-money calculation, same as an unpaid loan."
+        >
+          <input
+            type="checkbox"
+            checked={committed}
+            onChange={(e) => setCommitted(e.target.checked)}
+            className="h-3.5 w-3.5 accent-emerald-600"
+          />
+          {committed && <input type="hidden" name="isCommittedSpend" value="true" />}
+          Committed spend
+        </label>
+      )}
       <button
         type="submit"
         className="rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition active:scale-95"

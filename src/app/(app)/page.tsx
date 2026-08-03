@@ -12,6 +12,7 @@ import {
   monthRange,
   cutoffRange,
   currentCutoffLabel,
+  literalCutoffHalf,
 } from "@/lib/queries";
 import { formatMoney } from "@/lib/format";
 import { accountTypeLabel, personLabel } from "@/lib/labels";
@@ -61,6 +62,28 @@ export default async function DashboardPage({
   const expenseVariance = totalExpenseTarget - summary.expense;
   const cutoff = currentCutoffLabel();
   const totalPersonSpend = personSpend.JENNA + personSpend.KENNETH + personSpend.SHARED;
+
+  // "Extra money" = what's genuinely free to spend, not just "target minus spent
+  // so far" — every category's remaining budget is already spoken for (a peso
+  // has a job the moment it's budgeted), so it's excluded via isCommittedSpend,
+  // same as an unpaid loan due this period. Jen CC/Ken CC are excluded from this
+  // calc entirely (not "committed", not "flexible") — their real obligation is
+  // the credit card balance itself, already captured via get_loan_payments, so
+  // counting their category remaining too would double-subtract the same debt.
+  const floatCategories = expenseCategories.filter((c) => c.name !== "Jen CC" && c.name !== "Ken CC");
+  const totalCategoryRemaining = floatCategories.reduce((s, c) => s + (c.periodTarget - c.periodTotal), 0);
+  const committedRemaining = floatCategories
+    .filter((c) => c.isCommittedSpend)
+    .reduce((s, c) => s + (c.periodTarget - c.periodTotal), 0);
+  const flexibleRemaining = totalCategoryRemaining - committedRemaining;
+
+  const currentMonthLoanGroup = loanGroups.find((g) => g.monthKey === dayjs().format("YYYY-MM"));
+  const currentHalf = literalCutoffHalf(new Date());
+  const loansDueThisPeriod = (currentMonthLoanGroup?.payments ?? [])
+    .filter((p) => !p.paid && (view === "month" || literalCutoffHalf(p.dueDate) === currentHalf))
+    .reduce((s, p) => s + p.amount, 0);
+
+  const extraMoney = flexibleRemaining - loansDueThisPeriod;
 
   return (
     <>
@@ -189,6 +212,32 @@ export default async function DashboardPage({
             )}
           </p>
         )}
+      </div>
+
+      <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+        <p className="text-xs font-medium text-zinc-400">
+          Extra Money — {view === "month" ? "This Month" : "This Cutoff"}
+        </p>
+        <p
+          className={`mt-0.5 text-xl font-semibold tracking-tight ${
+            extraMoney < 0 ? "text-red-500 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"
+          }`}
+        >
+          <MaskableAmount value={extraMoney} />
+        </p>
+        <p className="mt-1 text-[11px] text-zinc-400">
+          <MaskableAmount value={flexibleRemaining} /> natitira sa budget
+          {committedRemaining > 0 && (
+            <>
+              {" "}(<MaskableAmount value={committedRemaining} /> for Baon/committed excluded)
+            </>
+          )}
+          {loansDueThisPeriod > 0 && (
+            <>
+              {", "}<MaskableAmount value={loansDueThisPeriod} /> loan due pa
+            </>
+          )}
+        </p>
       </div>
 
       {accounts

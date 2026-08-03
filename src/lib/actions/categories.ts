@@ -79,6 +79,7 @@ const targetsSchema = z.object({
   // 1-15 cutoff's share of monthlyTarget (EXPENSE only) — the 16-end cutoff's
   // target is monthlyTarget - firstHalfTarget, so only one number is stored.
   firstHalfTarget: z.coerce.number().min(0).optional(),
+  isCommittedSpend: z.coerce.boolean().optional(),
 });
 
 export async function updateCategoryTargets(formData: FormData) {
@@ -87,6 +88,7 @@ export async function updateCategoryTargets(formData: FormData) {
     monthlyTarget: formData.get("monthlyTarget"),
     goalTarget: formData.get("goalTarget"),
     firstHalfTarget: formData.get("firstHalfTarget") || undefined,
+    isCommittedSpend: formData.get("isCommittedSpend") || undefined,
   });
 
   const before = await prisma.category.findUnique({ where: { id: parsed.id } });
@@ -96,7 +98,12 @@ export async function updateCategoryTargets(formData: FormData) {
 
   const category = await prisma.category.update({
     where: { id: parsed.id },
-    data: { monthlyTarget: parsed.monthlyTarget, goalTarget: parsed.goalTarget, firstHalfTarget },
+    data: {
+      monthlyTarget: parsed.monthlyTarget,
+      goalTarget: parsed.goalTarget,
+      firstHalfTarget,
+      isCommittedSpend: parsed.isCommittedSpend ?? false,
+    },
   });
 
   const activity = await recordActivity({

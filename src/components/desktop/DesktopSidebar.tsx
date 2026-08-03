@@ -266,6 +266,7 @@ export function DesktopSidebar({
                     monthlyTarget={c.monthlyTarget}
                     goalTarget={c.goalTarget}
                     firstHalfTarget={savingsCategories.some((s) => s.id === c.id) ? undefined : c.firstHalfTarget}
+                    isCommittedSpend={c.isCommittedSpend}
                     showGoal={savingsCategories.some((s) => s.id === c.id)}
                   />
                   <ArchiveToggleButton id={c.id} archived={c.archived} toggleAction={toggleArchiveCategory} />

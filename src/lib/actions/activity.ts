@@ -122,6 +122,7 @@ async function undoCategory(log: { entityId: string; action: Action; before: unk
     monthlyTarget: d.monthlyTarget,
     goalTarget: d.goalTarget,
     firstHalfTarget: d.firstHalfTarget,
+    isCommittedSpend: d.isCommittedSpend,
     archived: d.archived,
     sortOrder: d.sortOrder,
   };

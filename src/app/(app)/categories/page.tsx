@@ -82,6 +82,7 @@ export default async function CategoriesPage({
                   monthlyTarget={category.monthlyTarget}
                   goalTarget={category.goalTarget}
                   firstHalfTarget={category.firstHalfTarget}
+                  isCommittedSpend={category.isCommittedSpend}
                   showGoal={false}
                 />
                 <ArchiveToggleButton

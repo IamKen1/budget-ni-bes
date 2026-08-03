@@ -58,6 +58,16 @@ export function cutoffRange(reference: Date = new Date()): DateRange {
   };
 }
 
+// Loan due dates (and other "which cutoff is this due in" questions) group the
+// plain, literal way — "1-15" means days 1 through 15 inclusive. Deliberately
+// NOT the same boundary as cutoffRange() above, which shifts day 15 into the
+// second half because that's when salary lands and starts funding the rest of
+// the month. A bill due on the 15th still reads as "due within 1-15" to a
+// human at a glance, so this uses its own literal grouping.
+export function literalCutoffHalf(date: Date): "1-15" | "16-31" {
+  return dayjs(date).date() <= 15 ? "1-15" : "16-31";
+}
+
 export type SerializedAccount = Omit<Account, "monthlyTarget" | "openingBalance"> & {
   monthlyTarget: number;
   openingBalance: number;

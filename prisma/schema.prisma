@@ -82,6 +82,13 @@ model Category {
   firstHalfTarget Decimal    @default(0) @db.Decimal(12, 2)
   /// Long-term savings goal for this fund (SAVINGS kind only). 0 = no goal set.
   goalTarget    Decimal      @default(0) @db.Decimal(12, 2)
+  /// EXPENSE kind only. True = this category's remaining budget for the
+  /// current cutoff is treated as a guaranteed future expense (like Baon —
+  /// money that will definitely still go out before the cutoff ends), not
+  /// flexible/discretionary room. Used to compute "float money" correctly —
+  /// its remaining amount gets subtracted the same way an unpaid loan due
+  /// this cutoff would, instead of counting as spendable extra.
+  isCommittedSpend Boolean   @default(false)
   archived      Boolean      @default(false)
   sortOrder     Int          @default(0)
   createdAt     DateTime     @default(now())

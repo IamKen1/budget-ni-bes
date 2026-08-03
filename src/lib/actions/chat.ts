@@ -48,6 +48,17 @@ Accounts vs. savings funds — these are different things, don't mix them up:
 - Any question naming a specific fund ("magkano na yung emergency fund", "how much is in Baby Fund", "malapit na ba matapos yung car fund") must be answered with get_savings_progress, never get_balances. A fund's balance is not the same number as any account's balance — never substitute one for the other or guess.
 - For timeline/projection questions about a fund ("kailan pa kami magkakabahay", "malapit na ba matapos yung car fund"), get_savings_progress already includes estimatedMonthsToReachGoal and estimatedDateToReachGoal computed from the fund's real saving pace — just call it once and report those fields directly. Don't try to chain multiple tools or compute the projection yourself.
 
+"May sobra ba kami" / "float money" / "pwede pa ba kaming gumastos ngayong cutoff" — this is NOT a total-balance question, don't answer it with get_balances:
+- What the family means by this is: of the budget actually allotted for this cutoff, how much is genuinely still free to spend after (a) what's already been spent, and (b) any loan/bill payments still due within this same cutoff that haven't been paid yet. It is NOT "total bank balance minus bills" — total balance includes savings funds, other cutoffs' money, and everything else that isn't free spending money, so using it here wildly overstates what's actually available and is a real mistake, not just an approximation.
+- The correct computation: call get_budget_progress (period defaults to 'cutoff' — leave it, don't pass 'month' unless they ask about the whole month) and take flexibleRemaining (NOT totalRemaining — flexibleRemaining already has committed categories like Baon subtracted, since that money will definitely still go out and isn't real "extra"; totalRemaining still counts it as available, which overstates the float) and currentLoanCutoff. Then call get_loan_payments, and find any payment where paid is false and dueCutoff equals that same currentLoanCutoff string (e.g. both "1-15") — match on this field, don't compare dueDate against periodStart/periodEnd yourself, since loan cutoffs group the 15th differently than budget cutoffs do (a bill due the 15th reads as within "1-15", not "16-31", even though salary landing the 15th funds the second half of spending — two different rules, dueCutoff already has the right one applied). Sum those unpaid due amounts. Float money = flexibleRemaining − that sum.
+- If flexibleRemaining alone is already negative (over budget), the float is negative regardless of loans — say clearly that they're already over budget this cutoff, don't add loans on top and call it "extra."
+- Present the actual pesos plainly, e.g. "May sobra kayong ₱X ngayong cutoff (₱Y natitira sa budget after Baon, minus ₱Z na loan due pa)." — show the components (flexibleRemaining and the loan sum), not just the final number, since this is exactly the kind of number worth double-checking.
+- Don't reach for get_balances at all for this question unless the user explicitly asks about total balance separately.
+
+Loans / Upcoming Payments (e.g. "ano pa may utang tayo", "magkano na natitira sa RCBC", "may due ba this week", "anong bayarin ngayong cutoff"):
+- Use get_loan_payments — never invent a payee, due date, or remaining balance. It returns everything grouped by due-date month, each payment with payee, dueDate, dueCutoff ("1-15" or "16-31"), amount, remainingBalance, and paid.
+- For "ngayong cutoff" questions, match dueCutoff against get_budget_progress's currentLoanCutoff (see the float-money rule above) — don't compare dueDate against any other range yourself. For "this week" questions, compare dueDate directly against today's date instead.
+
 Withdrawing from savings — two different scenarios, don't conflate them:
 - Spent directly for the fund's own purpose (e.g. "binayaran namin ng car fund yung car repair", a car expense paid straight from the Car Fund sitting in BPI): this is ONE log_transaction call — entryType SAVINGS_WITHDRAW, categoryName = the fund, accountName = whichever account actually holds that fund's money (e.g. BPI; ask if unclear). The money never becomes general spending money, so nothing else needs logging.
 - Moved out to become general spending money (e.g. "kinuha namin sa emergency fund yung 5000 para gastusin", "nag-withdraw kami sa car fund papunta sa Maribank"): this needs TWO log_transaction calls, matching how the family's old spreadsheet tracked it:
@@ -130,6 +141,26 @@ const PROVIDERS: ProviderConfig[] = [
     model: "meta-llama/Llama-3.3-70B-Instruct:novita",
     apiKey: process.env.HF_TOKEN,
   },
+  // Same model, different backend providers behind HF's router — each is billed/
+  // rate-limited separately from the "novita" one above, so when that one's
+  // per-minute limit is hit, these give a few more real shots at the same
+  // known-good, tool-calling-capable model before falling all the way to Gemini
+  // (which has its own compatibility issues when picking up mid tool-loop).
+  {
+    id: "huggingface-together",
+    url: "https://router.huggingface.co/v1/chat/completions",
+    model: "meta-llama/Llama-3.3-70B-Instruct:together",
+    apiKey: process.env.HF_TOKEN,
+  },
+  // gpt-oss-20b — OpenAI's own open-weight model, built specifically for
+  // agentic/tool-use tasks, via fireworks-ai's backend (confirmed to actually
+  // support this model, unlike fireworks-ai's now-dropped Llama-3.3-70B).
+  {
+    id: "huggingface-gptoss",
+    url: "https://router.huggingface.co/v1/chat/completions",
+    model: "openai/gpt-oss-20b:fireworks-ai",
+    apiKey: process.env.HF_TOKEN,
+  },
   {
     id: "gemini",
     url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
@@ -149,7 +180,44 @@ class AiProviderError extends Error {
   }
 }
 
+type ChatApiMessage = {
+  role: string;
+  content?: string | null;
+  tool_calls?: unknown;
+  tool_call_id?: string;
+};
+
+/** Gemini's function-calling requires a thought_signature on any function-call
+ * part, which only Gemini itself can produce — a tool_calls message relayed from
+ * Groq/HF (built earlier in this same turn, before they hit their rate limit) will
+ * never have one, and Gemini hard-rejects the whole request over it (400 "Function
+ * call is missing a thought_signature"). Since this can happen any time Gemini has
+ * to pick up mid tool-loop after another provider fails, collapse prior tool-call
+ * round-trips into plain text before ever sending history to Gemini specifically. */
+function sanitizeForGemini(messages: unknown[]): unknown[] {
+  const out: ChatApiMessage[] = [];
+  for (const raw of messages as ChatApiMessage[]) {
+    if (raw.role === "assistant" && raw.tool_calls) {
+      out.push({ role: "assistant", content: raw.content || "(previously called a tool this turn)" });
+      continue;
+    }
+    if (raw.role === "tool") {
+      // Kept as its own turn (role "user", not merged into the prior assistant
+      // message) so the sequence still ends on a non-assistant turn whenever a
+      // tool result is the most recent thing in the conversation — Gemini
+      // rejects any request ending with a "model" role turn ("Requests ending
+      // with a model turn are not supported"), which folding this into the
+      // assistant's own text would otherwise produce.
+      out.push({ role: "user", content: `(tool result: ${raw.content})` });
+      continue;
+    }
+    out.push(raw);
+  }
+  return out;
+}
+
 async function callProvider(provider: ProviderConfig, messages: unknown[]) {
+  const outgoingMessages = provider.id === "gemini" ? sanitizeForGemini(messages) : messages;
   const res = await fetch(provider.url, {
     method: "POST",
     headers: {
@@ -159,7 +227,7 @@ async function callProvider(provider: ProviderConfig, messages: unknown[]) {
     },
     body: JSON.stringify({
       model: provider.model,
-      messages,
+      messages: outgoingMessages,
       tools: toolDefinitions,
       tool_choice: "auto",
       // Forces one tool call per turn instead of several bundled into a single
@@ -182,6 +250,14 @@ async function callProvider(provider: ProviderConfig, messages: unknown[]) {
   return res.json();
 }
 
+// Statuses worth bailing out of the retry loop immediately for — retrying never
+// helps any of these: 429 is a rate/quota limit (needs to wait, not hammer),
+// 402 is a depleted prepaid/monthly credit balance (won't recover within this
+// process's lifetime), and 410 is a model the provider has stopped supporting
+// entirely (e.g. HF's fireworks-ai backend dropping a model — will never
+// succeed until the code picks a different model, no amount of retrying fixes it).
+const NON_RETRYABLE_STATUSES = new Set([429, 402, 410]);
+
 async function callProviderWithRetry(provider: ProviderConfig, messages: unknown[], attempts = 4) {
   let lastErr: unknown;
   for (let i = 0; i < attempts; i++) {
@@ -189,7 +265,7 @@ async function callProviderWithRetry(provider: ProviderConfig, messages: unknown
       return await callProvider(provider, messages);
     } catch (err) {
       lastErr = err;
-      if (err instanceof AiProviderError && err.status === 429) throw err;
+      if (err instanceof AiProviderError && NON_RETRYABLE_STATUSES.has(err.status)) throw err;
       console.error(`Bes AI: ${provider.id} call failed (attempt ${i + 1}/${attempts}):`, err);
     }
   }
@@ -202,7 +278,15 @@ async function callProviderWithRetry(provider: ProviderConfig, messages: unknown
  * every 24h, but any retryDelay they return (e.g. Gemini's "17s") is a generic
  * per-minute hint that wildly understates a daily-quota wait, so that's ignored in
  * favor of a flat 24h whenever the error body itself says the limit is per-day. */
-function parseRetryAfterMs(providerId: string, body: string): number {
+function parseRetryAfterMs(providerId: string, body: string, status?: number): number {
+  // 410 = provider stopped supporting this model entirely — won't ever recover
+  // on its own (needs a code change), so stop retrying for a long time rather
+  // than the usual short backoff.
+  if (status === 410) return 30 * 24 * 60 * 60 * 1000;
+  // 402 = prepaid/monthly credit balance depleted — won't refill within this
+  // process's lifetime either; treat like a daily quota so it's not hammered
+  // every message, even though the real reset is monthly.
+  if (status === 402) return 24 * 60 * 60 * 1000;
   if (providerId === "groq") {
     const match = body.match(/try again in\s*(?:(\d+)h)?(?:(\d+)m)?(?:(\d+(?:\.\d+)?)s)?/i);
     if (match) {
@@ -222,8 +306,8 @@ function parseRetryAfterMs(providerId: string, body: string): number {
 /** Remembers a 429 so subsequent messages skip straight past this provider instead of
  * re-hitting it (and wasting other providers' tiny daily quotas on a doomed retry)
  * every single time until this provider's own reset window has actually passed. */
-async function markProviderExhausted(providerId: string, body: string) {
-  const retryAfter = new Date(Date.now() + parseRetryAfterMs(providerId, body));
+async function markProviderExhausted(providerId: string, body: string, status?: number) {
+  const retryAfter = new Date(Date.now() + parseRetryAfterMs(providerId, body, status));
   await prisma.aiProviderStatus.upsert({
     where: { provider: providerId },
     update: { retryAfter },
@@ -261,9 +345,9 @@ async function callAi(
       return result;
     } catch (err) {
       lastErr = err;
-      if (err instanceof AiProviderError && err.status === 429) {
-        await markProviderExhausted(provider.id, err.message);
-        knownExhausted.set(provider.id, new Date(Date.now() + parseRetryAfterMs(provider.id, err.message)));
+      if (err instanceof AiProviderError && NON_RETRYABLE_STATUSES.has(err.status)) {
+        await markProviderExhausted(provider.id, err.message, err.status);
+        knownExhausted.set(provider.id, new Date(Date.now() + parseRetryAfterMs(provider.id, err.message, err.status)));
       }
       console.error(`Bes AI: ${provider.id} unavailable, trying next:`, err);
     }
@@ -417,7 +501,7 @@ export async function sendChatMessage(history: ChatMessage[]): Promise<string> {
     // the real retryAfter for whatever just failed — some of these are a burst
     // per-minute token cap (seconds away), not always a daily quota, so the wording
     // has to reflect the actual wait instead of always claiming a 24h reset.
-    if (err instanceof AiProviderError && err.status === 429) {
+    if (err instanceof AiProviderError && NON_RETRYABLE_STATUSES.has(err.status)) {
       const retryTimes = Array.from(exhausted.values()).map((d) => d.getTime());
       const soonest = retryTimes.length > 0 ? new Date(Math.min(...retryTimes)) : new Date(Date.now() + 5 * 60 * 1000);
       const waitMs = soonest.getTime() - Date.now();

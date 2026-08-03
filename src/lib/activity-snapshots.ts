@@ -82,6 +82,7 @@ export function categorySnapshot(c: {
   monthlyTarget: unknown;
   goalTarget: unknown;
   firstHalfTarget: unknown;
+  isCommittedSpend: boolean;
   archived: boolean;
   sortOrder: number;
 }) {
@@ -91,6 +92,7 @@ export function categorySnapshot(c: {
     monthlyTarget: toNumber(c.monthlyTarget),
     goalTarget: toNumber(c.goalTarget),
     firstHalfTarget: toNumber(c.firstHalfTarget),
+    isCommittedSpend: c.isCommittedSpend,
     archived: c.archived,
     sortOrder: c.sortOrder,
   };
