@@ -300,6 +300,7 @@ export async function getPeriodSummary(range: DateRange = monthRange()) {
   });
 
   let income = 0;
+  let allIncome = 0;
   let expense = 0;
   let saved = 0;
 
@@ -311,14 +312,20 @@ export async function getPeriodSummary(range: DateRange = monthRange()) {
     // only real salary landing in an account. Interest, reimbursements, savings
     // withdrawn back into spending money, and one-off balance adjustments are
     // all logged as INCOME too (for correct account balances) but aren't what
-    // the family means by "Deposits", so they're excluded here.
-    if (tx.entryType === "INCOME" && tx.isSalaryIncome) income += amount;
+    // the family means by "Deposits", so they're excluded here. allIncome is
+    // every INCOME transaction, unfiltered — used for cash-flow math (e.g.
+    // "extra money": real money in vs. real money out this period) where the
+    // salary-only distinction doesn't apply, matching the family's own sheet.
+    if (tx.entryType === "INCOME") {
+      allIncome += amount;
+      if (tx.isSalaryIncome) income += amount;
+    }
     if (tx.entryType === "EXPENSE") expense += amount;
     if (tx.entryType === "SAVINGS_DEPOSIT") saved += amount;
     if (tx.entryType === "SAVINGS_WITHDRAW") saved -= amount;
   }
 
-  return { income, expense, saved };
+  return { income, allIncome, expense, saved };
 }
 
 export async function getPersonSpendBreakdown(
@@ -426,8 +433,16 @@ export async function getAllTransactions(filter?: {
     }
     if (filter?.categoryId && tx.categoryId !== filter.categoryId) return false;
     if (filter?.entryType && tx.entryType !== filter.entryType) return false;
-    if (filter?.from && tx.date < filter.from) return false;
-    if (filter?.to && tx.date > filter.to) return false;
+    // periodOverride-aware — a transaction dated outside from/to can still belong
+    // here (e.g. salary dated the last day of a cutoff but meant for the next
+    // one), matching how getPeriodSummary/getExpenseCategoriesWithProgress
+    // already scope things. Without this, a period's drill-down list can miss
+    // (or wrongly include) exactly the transactions its own total accounts for.
+    if (filter?.from || filter?.to) {
+      const d = effectiveDate(tx);
+      if (filter.from && d < filter.from) return false;
+      if (filter.to && d > filter.to) return false;
+    }
     return true;
   });
 

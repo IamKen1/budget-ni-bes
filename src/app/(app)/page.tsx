@@ -12,7 +12,6 @@ import {
   monthRange,
   cutoffRange,
   currentCutoffLabel,
-  literalCutoffHalf,
 } from "@/lib/queries";
 import { formatMoney } from "@/lib/format";
 import { accountTypeLabel, personLabel } from "@/lib/labels";
@@ -63,27 +62,16 @@ export default async function DashboardPage({
   const cutoff = currentCutoffLabel();
   const totalPersonSpend = personSpend.JENNA + personSpend.KENNETH + personSpend.SHARED;
 
-  // "Extra money" = what's genuinely free to spend, not just "target minus spent
-  // so far" — every category's remaining budget is already spoken for (a peso
-  // has a job the moment it's budgeted), so it's excluded via isCommittedSpend,
-  // same as an unpaid loan due this period. Jen CC/Ken CC are excluded from this
-  // calc entirely (not "committed", not "flexible") — their real obligation is
-  // the credit card balance itself, already captured via get_loan_payments, so
-  // counting their category remaining too would double-subtract the same debt.
-  const floatCategories = expenseCategories.filter((c) => c.name !== "Jen CC" && c.name !== "Ken CC");
-  const totalCategoryRemaining = floatCategories.reduce((s, c) => s + (c.periodTarget - c.periodTotal), 0);
-  const committedRemaining = floatCategories
-    .filter((c) => c.isCommittedSpend)
-    .reduce((s, c) => s + (c.periodTarget - c.periodTotal), 0);
-  const flexibleRemaining = totalCategoryRemaining - committedRemaining;
-
-  const currentMonthLoanGroup = loanGroups.find((g) => g.monthKey === dayjs().format("YYYY-MM"));
-  const currentHalf = literalCutoffHalf(new Date());
-  const loansDueThisPeriod = (currentMonthLoanGroup?.payments ?? [])
-    .filter((p) => !p.paid && (view === "month" || literalCutoffHalf(p.dueDate) === currentHalf))
-    .reduce((s, p) => s + p.amount, 0);
-
-  const extraMoney = flexibleRemaining - loansDueThisPeriod;
+  // "Extra money" — verified directly against the family's own spreadsheet
+  // (Summary Per Cutoff: REMAINING + TOTAL EXPENSE VARIANCE). Real cash flow
+  // for the period (all income − all expense), minus whatever's still
+  // budgeted-but-unspent across every category — that unspent room is already
+  // earmarked for its category's own purpose, not free money, even before it's
+  // actually spent. No loans involved here; loan schedules live in a separate
+  // sheet the family doesn't cross-reference for this particular figure.
+  const cashSurplus = summary.allIncome - summary.expense;
+  const totalCategoryRemaining = expenseCategories.reduce((s, c) => s + (c.periodTarget - c.periodTotal), 0);
+  const extraMoney = cashSurplus - totalCategoryRemaining;
 
   return (
     <>
@@ -214,7 +202,10 @@ export default async function DashboardPage({
         )}
       </div>
 
-      <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <Link
+        href={`/extra-money?view=${view}`}
+        className="block rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition active:scale-[0.99] dark:border-zinc-800 dark:bg-zinc-900"
+      >
         <p className="text-xs font-medium text-zinc-400">
           Extra Money — {view === "month" ? "This Month" : "This Cutoff"}
         </p>
@@ -225,20 +216,11 @@ export default async function DashboardPage({
         >
           <MaskableAmount value={extraMoney} />
         </p>
-        <p className="mt-1 text-[11px] text-zinc-400">
-          <MaskableAmount value={flexibleRemaining} /> natitira sa budget
-          {committedRemaining > 0 && (
-            <>
-              {" "}(<MaskableAmount value={committedRemaining} /> for Baon/committed excluded)
-            </>
-          )}
-          {loansDueThisPeriod > 0 && (
-            <>
-              {", "}<MaskableAmount value={loansDueThisPeriod} /> loan due pa
-            </>
-          )}
+        <p className="mt-1 text-[11px] text-zinc-400 underline decoration-zinc-300 underline-offset-2 dark:decoration-zinc-700">
+          <MaskableAmount value={summary.allIncome} /> pumasok, <MaskableAmount value={summary.expense} /> nagastos,{" "}
+          <MaskableAmount value={totalCategoryRemaining} /> pang budget na di pa nagagastos — tap to see the list
         </p>
-      </div>
+      </Link>
 
       {accounts
         .filter((a) => a.monthlyTarget > 0)

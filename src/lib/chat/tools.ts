@@ -5,6 +5,7 @@ import {
   getAccountsWithBalances,
   getExpenseCategoriesWithProgress,
   getLoanPaymentsByMonth,
+  getPeriodSummary,
   monthRange,
   cutoffRange,
   literalCutoffHalf,
@@ -82,7 +83,7 @@ export const toolDefinitions = [
     function: {
       name: "get_budget_progress",
       description:
-        "Get expense categories with their target, how much has been spent so far, and how much is left — plus periodStart/periodEnd/periodLabel and a totalRemaining sum. Defaults to the CURRENT CUTOFF (the family's real semi-monthly budgeting period, e.g. 'ngayong cutoff') — pass period 'month' only if the user explicitly asks about the whole month. For any 'may sobra ba kami' / 'float money' / 'pwede pa ba gumastos' question, this is the starting point — see the system prompt's float-money rule for how to combine this with get_loan_payments correctly.",
+        "Get expense categories with their target, how much has been spent so far, and how much is left — plus periodStart/periodEnd/periodLabel, totalIncome, and totalExpense for the period. Defaults to the CURRENT CUTOFF (the family's real semi-monthly budgeting period, e.g. 'ngayong cutoff') — pass period 'month' only if the user explicitly asks about the whole month. For any 'may sobra ba kami' / 'float money' / 'pwede pa ba gumastos' question, use totalIncome and totalExpense here (NOT the per-category targets) — see the system prompt's float-money rule for the exact formula.",
       parameters: {
         type: "object",
         properties: {
@@ -398,7 +399,10 @@ async function toolGetBudgetProgress(args?: { period?: "cutoff" | "month" }) {
   const targetScope: TargetScope =
     period === "month" ? "month" : dayjs().date() <= 14 ? "first-half" : "second-half";
 
-  const categories = await getExpenseCategoriesWithProgress(range, targetScope);
+  const [categories, periodSummary] = await Promise.all([
+    getExpenseCategoriesWithProgress(range, targetScope),
+    getPeriodSummary(range),
+  ]);
   const rows = categories
     .filter((c) => c.periodTarget > 0 || c.periodTotal > 0)
     .map((c) => ({
@@ -407,38 +411,31 @@ async function toolGetBudgetProgress(args?: { period?: "cutoff" | "month" }) {
       spent: c.periodTotal,
       remaining: c.periodTarget - c.periodTotal,
       overBudget: c.periodTarget > 0 && c.periodTotal > c.periodTarget,
-      // e.g. Baon — this category's remaining budget WILL still go out before
-      // the cutoff ends (a guaranteed expense), not flexible/discretionary room.
-      isCommittedSpend: c.isCommittedSpend,
     }));
 
-  // Jen CC/Ken CC are excluded from totalRemaining/committedRemaining/
-  // flexibleRemaining entirely (not "committed", not "flexible" either) — their
-  // real obligation is the credit card balance itself, already captured via
-  // get_loan_payments, so counting their category remaining too would
-  // double-subtract the same debt. They still appear normally in `categories`
-  // below for per-category questions, just excluded from these float-money sums.
-  const floatRows = rows.filter((r) => r.category !== "Jen CC" && r.category !== "Ken CC");
-  const totalRemaining = floatRows.reduce((s, r) => s + r.remaining, 0);
-  const committedRemaining = floatRows.filter((r) => r.isCommittedSpend).reduce((s, r) => s + r.remaining, 0);
+  const totalTarget = rows.reduce((s, r) => s + r.target, 0);
+  const totalCategoryRemaining = rows.reduce((s, r) => s + r.remaining, 0);
 
   return {
     period,
     periodLabel: range.label,
     periodStart: dayjs(range.start).format("YYYY-MM-DD"),
     periodEnd: dayjs(range.end).format("YYYY-MM-DD"),
-    // Match this against get_loan_payments' dueCutoff field (both "1-15"/"16-31")
-    // to find loans due within the current cutoff — don't compare raw dates
-    // yourself, the boundary rule differs from periodStart/periodEnd above.
+    totalIncome: periodSummary.allIncome,
+    totalExpense: periodSummary.expense,
+    totalTarget,
+    // Sum of (target − spent) across every category — verified directly
+    // against the family's own spreadsheet (Summary Per Cutoff: REMAINING +
+    // TOTAL EXPENSE VARIANCE). For any "float money" / "sobra ba kami"
+    // question: extra money = (totalIncome − totalExpense) − totalCategoryRemaining.
+    // No loans involved — the family's own sheet doesn't cross-reference loan
+    // schedules for this figure, so don't add that subtraction yourself.
+    totalCategoryRemaining,
+    // For loan questions only (unrelated to the float-money formula above) —
+    // match against get_loan_payments' dueCutoff field to find what's due
+    // "ngayong cutoff". Loan cutoffs group the 15th literally (into "1-15"),
+    // unlike this budget period's own boundary above.
     currentLoanCutoff: period === "cutoff" ? literalCutoffHalf(new Date()) : null,
-    totalTarget: rows.reduce((s, r) => s + r.target, 0),
-    totalSpent: rows.reduce((s, r) => s + r.spent, 0),
-    totalRemaining,
-    // totalRemaining still counting committed categories (e.g. Baon) as available.
-    // flexibleRemaining already has that subtracted — use THIS as the starting
-    // point for any "float money" / "sobra ba kami" question, not totalRemaining.
-    committedRemaining,
-    flexibleRemaining: totalRemaining - committedRemaining,
     categories: rows,
   };
 }
