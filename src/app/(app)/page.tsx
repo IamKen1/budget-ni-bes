@@ -57,8 +57,6 @@ export default async function DashboardPage({
   const upcomingLoanCount = upcomingLoanGroup?.payments.filter((p) => !p.paid).length ?? 0;
 
   const totalBalance = accounts.reduce((sum, a) => sum + a.balance, 0);
-  const totalExpenseTarget = expenseCategories.reduce((sum, c) => sum + c.periodTarget, 0);
-  const expenseVariance = totalExpenseTarget - summary.expense;
   const cutoff = currentCutoffLabel();
   const totalPersonSpend = personSpend.JENNA + personSpend.KENNETH + personSpend.SHARED;
 
@@ -165,62 +163,27 @@ export default async function DashboardPage({
         <p className="mt-0.5 text-2xl font-semibold tracking-tight">
           <MaskableAmount value={totalBalance} />
         </p>
-        <div className="mt-3 flex gap-4 text-xs">
-          <Link
-            href={`/transactions?entryType=INCOME&from=${period.start.toISOString()}&to=${period.end.toISOString()}&label=${encodeURIComponent(`Deposits — ${period.label}`)}`}
-            className="active:opacity-70"
-          >
-            <p className="text-emerald-100 underline decoration-emerald-100/40 underline-offset-2">Deposits</p>
-            <p className="font-semibold"><MaskableAmount value={summary.income} /></p>
-          </Link>
-          <Link
-            href={`/transactions?entryType=EXPENSE&from=${period.start.toISOString()}&to=${period.end.toISOString()}&label=${encodeURIComponent(`Expenses — ${period.label}`)}`}
-            className="active:opacity-70"
-          >
-            <p className="text-emerald-100 underline decoration-emerald-100/40 underline-offset-2">Expenses</p>
-            <p className="font-semibold"><MaskableAmount value={summary.expense} /></p>
-          </Link>
-          <div>
-            <p className="text-emerald-100">Saved</p>
-            <p className="font-semibold"><MaskableAmount value={summary.saved} /></p>
-          </div>
-        </div>
-        {totalExpenseTarget > 0 && (
-          <p className="mt-3 text-xs font-medium text-emerald-100">
-            {expenseVariance >= 0 ? (
-              <>
-                <MaskableAmount value={expenseVariance} /> left of your{" "}
-                <MaskableAmount value={totalExpenseTarget} /> {view === "month" ? "monthly" : "cutoff"} budget
-              </>
-            ) : (
-              <>
-                <MaskableAmount value={Math.abs(expenseVariance)} /> over your{" "}
-                <MaskableAmount value={totalExpenseTarget} /> {view === "month" ? "monthly" : "cutoff"} budget
-              </>
-            )}
-          </p>
-        )}
-      </div>
 
-      <Link
-        href={`/extra-money?view=${view}`}
-        className="block rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition active:scale-[0.99] dark:border-zinc-800 dark:bg-zinc-900"
-      >
-        <p className="text-xs font-medium text-zinc-400">
-          Extra Money — {view === "month" ? "This Month" : "This Cutoff"}
-        </p>
-        <p
-          className={`mt-0.5 text-xl font-semibold tracking-tight ${
-            extraMoney < 0 ? "text-red-500 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"
-          }`}
+        <Link
+          href={`/extra-money?view=${view}`}
+          className="mt-4 block rounded-2xl bg-white/10 p-3 transition active:scale-[0.98]"
         >
-          <MaskableAmount value={extraMoney} />
-        </p>
-        <p className="mt-1 text-[11px] text-zinc-400 underline decoration-zinc-300 underline-offset-2 dark:decoration-zinc-700">
-          <MaskableAmount value={summary.allIncome} /> pumasok, <MaskableAmount value={summary.expense} /> nagastos,{" "}
-          <MaskableAmount value={totalCategoryRemaining} /> pang budget na di pa nagagastos — tap to see the list
-        </p>
-      </Link>
+          <p className="text-xs font-medium text-emerald-100">
+            Extra Money — {view === "month" ? "This Month" : "This Cutoff"}
+          </p>
+          <p
+            className={`mt-0.5 text-xl font-semibold tracking-tight ${
+              extraMoney < 0 ? "text-red-200" : "text-white"
+            }`}
+          >
+            <MaskableAmount value={extraMoney} />
+          </p>
+          <p className="mt-1 text-[11px] text-emerald-100/80 underline decoration-emerald-100/30 underline-offset-2">
+            <MaskableAmount value={summary.allIncome} /> pumasok, <MaskableAmount value={summary.expense} /> nagastos,{" "}
+            <MaskableAmount value={totalCategoryRemaining} /> pang budget na di pa nagagastos — tap to see the list
+          </p>
+        </Link>
+      </div>
 
       {accounts
         .filter((a) => a.monthlyTarget > 0)
