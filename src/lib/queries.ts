@@ -328,6 +328,58 @@ export async function getPeriodSummary(range: DateRange = monthRange()) {
   return { income, allIncome, expense, saved };
 }
 
+// The family's own cutoff summary only ever tracks Maribank + Cash on Hand —
+// their two "spending money" accounts. BPI Joint/BPI CC Payment are savings
+// and credit-card-payment accounts respectively, deliberately excluded from
+// this cash-flow figure (matches their sheet's "1-15 CUTOFF" tab, which has
+// no BPI column at all).
+const SPENDING_ACCOUNT_NAMES = ["Maribank", "Cash on Hand"];
+
+/** Income/expense cash flow for this period, restricted to the spending-money
+ * accounts (Maribank + Cash on Hand) — the basis for "Extra Money", matching
+ * the family's own sheet exactly (their REMAINING row never touches BPI). */
+export async function getSpendingAccountsCashFlow(range: DateRange = monthRange()) {
+  const { start, end } = range;
+  const accounts = await prisma.account.findMany({ where: { name: { in: SPENDING_ACCOUNT_NAMES } } });
+  const accountIds = accounts.map((a) => a.id);
+
+  const transactions = await prisma.transaction.findMany({
+    where: {
+      accountId: { in: accountIds },
+      entryType: { in: ["INCOME", "EXPENSE"] },
+      OR: [{ date: { gte: start, lte: end } }, { periodOverride: { gte: start, lte: end } }],
+    },
+  });
+
+  let income = 0;
+  let expense = 0;
+  for (const tx of transactions) {
+    const d = effectiveDate(tx);
+    if (d < start || d > end) continue;
+    const amount = toNumber(tx.amount);
+    if (tx.entryType === "INCOME") income += amount;
+    if (tx.entryType === "EXPENSE") expense += amount;
+  }
+
+  return { income, expense };
+}
+
+/** All-time net balance of a single savings category by name — used for funds
+ * that sit outside the normal spending/category flow (e.g. "Daddy" ipon). */
+export async function getSavingsCategoryBalance(name: string): Promise<number> {
+  const category = await prisma.category.findUnique({
+    where: { name },
+    include: { transactions: { where: { entryType: { in: ["SAVINGS_DEPOSIT", "SAVINGS_WITHDRAW"] } } } },
+  });
+  if (!category) return 0;
+  let total = 0;
+  for (const tx of category.transactions) {
+    const amount = toNumber(tx.amount);
+    total += tx.entryType === "SAVINGS_WITHDRAW" ? -amount : amount;
+  }
+  return total;
+}
+
 export async function getPersonSpendBreakdown(
   range: DateRange = monthRange()
 ): Promise<Record<Person, number>> {

@@ -9,6 +9,8 @@ import {
   getRecentTransactions,
   getAllTransactions,
   getLoanPaymentsByMonth,
+  getSpendingAccountsCashFlow,
+  getSavingsCategoryBalance,
   monthRange,
   cutoffRange,
   currentCutoffLabel,
@@ -41,17 +43,29 @@ export default async function DashboardPage({
   const view = viewParam === "month" ? "month" : "cutoff";
   const period = view === "month" ? monthRange() : cutoffRange();
   const targetScope = view === "month" ? "month" : dayjs().date() <= 14 ? "first-half" : "second-half";
-  const [accounts, expenseCategories, savingsCategories, summary, personSpend, recent, allTransactions, loanGroups] =
-    await Promise.all([
-      getAccountsWithBalances(),
-      getExpenseCategoriesWithProgress(period, targetScope),
-      getSavingsCategoriesWithProgress(period),
-      getPeriodSummary(period),
-      getPersonSpendBreakdown(period),
-      getRecentTransactions(8),
-      getAllTransactions(),
-      getLoanPaymentsByMonth(),
-    ]);
+  const [
+    accounts,
+    expenseCategories,
+    savingsCategories,
+    summary,
+    personSpend,
+    recent,
+    allTransactions,
+    loanGroups,
+    spendingCashFlow,
+    daddyBalance,
+  ] = await Promise.all([
+    getAccountsWithBalances(),
+    getExpenseCategoriesWithProgress(period, targetScope),
+    getSavingsCategoriesWithProgress(period),
+    getPeriodSummary(period),
+    getPersonSpendBreakdown(period),
+    getRecentTransactions(8),
+    getAllTransactions(),
+    getLoanPaymentsByMonth(),
+    getSpendingAccountsCashFlow(period),
+    getSavingsCategoryBalance("Daddy"),
+  ]);
 
   const upcomingLoanGroup = loanGroups.find((g) => !g.payments.every((p) => p.paid)) ?? loanGroups[0];
   const upcomingLoanCount = upcomingLoanGroup?.payments.filter((p) => !p.paid).length ?? 0;
@@ -61,15 +75,15 @@ export default async function DashboardPage({
   const totalPersonSpend = personSpend.JENNA + personSpend.KENNETH + personSpend.SHARED;
 
   // "Extra money" — verified directly against the family's own spreadsheet
-  // (Summary Per Cutoff: REMAINING + TOTAL EXPENSE VARIANCE). Real cash flow
-  // for the period (all income − all expense), minus whatever's still
-  // budgeted-but-unspent across every category — that unspent room is already
-  // earmarked for its category's own purpose, not free money, even before it's
-  // actually spent. No loans involved here; loan schedules live in a separate
-  // sheet the family doesn't cross-reference for this particular figure.
-  const cashSurplus = summary.allIncome - summary.expense;
+  // (Summary Per Cutoff: REMAINING + TOTAL EXPENSE VARIANCE + Daddy ipon).
+  // Cash flow is scoped to the spending-money accounts only (Maribank + Cash
+  // on Hand — see getSpendingAccountsCashFlow), matching their sheet's "1-15
+  // CUTOFF" tab which never touches BPI. Daddy's ipon sits outside the normal
+  // category flow and is added back in on top. No loans involved here; loan
+  // schedules live in a separate sheet the family doesn't cross-reference for
+  // this particular figure.
   const totalCategoryRemaining = expenseCategories.reduce((s, c) => s + (c.periodTarget - c.periodTotal), 0);
-  const extraMoney = cashSurplus - totalCategoryRemaining;
+  const extraMoney = spendingCashFlow.income - spendingCashFlow.expense - totalCategoryRemaining + daddyBalance;
 
   return (
     <>
@@ -179,8 +193,8 @@ export default async function DashboardPage({
             <MaskableAmount value={extraMoney} />
           </p>
           <p className="mt-1 text-[11px] text-emerald-100/80 underline decoration-emerald-100/30 underline-offset-2">
-            <MaskableAmount value={summary.allIncome} /> pumasok, <MaskableAmount value={summary.expense} /> nagastos,{" "}
-            <MaskableAmount value={totalCategoryRemaining} /> pang budget na di pa nagagastos — tap to see the list
+            <MaskableAmount value={spendingCashFlow.income} /> pumasok, <MaskableAmount value={spendingCashFlow.expense} /> nagastos,{" "}
+            <MaskableAmount value={totalCategoryRemaining} /> pang budget na di pa nagagastos, +<MaskableAmount value={daddyBalance} /> ipon ni Daddy — tap to see the list
           </p>
         </Link>
       </div>

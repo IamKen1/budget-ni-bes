@@ -5,7 +5,8 @@ import {
   getAccountsWithBalances,
   getExpenseCategoriesWithProgress,
   getLoanPaymentsByMonth,
-  getPeriodSummary,
+  getSpendingAccountsCashFlow,
+  getSavingsCategoryBalance,
   monthRange,
   cutoffRange,
   literalCutoffHalf,
@@ -399,9 +400,10 @@ async function toolGetBudgetProgress(args?: { period?: "cutoff" | "month" }) {
   const targetScope: TargetScope =
     period === "month" ? "month" : dayjs().date() <= 14 ? "first-half" : "second-half";
 
-  const [categories, periodSummary] = await Promise.all([
+  const [categories, spendingCashFlow, daddyBalance] = await Promise.all([
     getExpenseCategoriesWithProgress(range, targetScope),
-    getPeriodSummary(range),
+    getSpendingAccountsCashFlow(range),
+    getSavingsCategoryBalance("Daddy"),
   ]);
   const rows = categories
     .filter((c) => c.periodTarget > 0 || c.periodTotal > 0)
@@ -421,16 +423,22 @@ async function toolGetBudgetProgress(args?: { period?: "cutoff" | "month" }) {
     periodLabel: range.label,
     periodStart: dayjs(range.start).format("YYYY-MM-DD"),
     periodEnd: dayjs(range.end).format("YYYY-MM-DD"),
-    totalIncome: periodSummary.allIncome,
-    totalExpense: periodSummary.expense,
+    // Scoped to the spending-money accounts only (Maribank + Cash on Hand) —
+    // matches the family's own "1-15 CUTOFF" sheet, which never touches BPI
+    // Joint/BPI CC Payment for this figure.
+    totalIncome: spendingCashFlow.income,
+    totalExpense: spendingCashFlow.expense,
     totalTarget,
     // Sum of (target − spent) across every category — verified directly
     // against the family's own spreadsheet (Summary Per Cutoff: REMAINING +
     // TOTAL EXPENSE VARIANCE). For any "float money" / "sobra ba kami"
-    // question: extra money = (totalIncome − totalExpense) − totalCategoryRemaining.
+    // question: extra money = (totalIncome − totalExpense) − totalCategoryRemaining + daddyBalance.
     // No loans involved — the family's own sheet doesn't cross-reference loan
     // schedules for this figure, so don't add that subtraction yourself.
     totalCategoryRemaining,
+    // "Daddy" ipon — a separate savings fund outside the normal category
+    // flow, added back on top of the float-money figure above.
+    daddyBalance,
     // For loan questions only (unrelated to the float-money formula above) —
     // match against get_loan_payments' dueCutoff field to find what's due
     // "ngayong cutoff". Loan cutoffs group the 15th literally (into "1-15"),

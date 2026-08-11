@@ -3,12 +3,16 @@ import dayjs from "dayjs";
 import {
   getAllTransactions,
   getExpenseCategoriesWithProgress,
+  getAllAccounts,
+  getSavingsCategoryBalance,
   monthRange,
   cutoffRange,
 } from "@/lib/queries";
 import { formatMoney } from "@/lib/format";
 import { DeletableTransactionRow } from "@/components/DeletableTransactionRow";
 import { ProgressBar } from "@/components/ProgressBar";
+
+const SPENDING_ACCOUNT_NAMES = ["Maribank", "Cash on Hand"];
 
 export default async function ExtraMoneyPage({
   searchParams,
@@ -20,17 +24,28 @@ export default async function ExtraMoneyPage({
   const period = view === "month" ? monthRange() : cutoffRange();
   const targetScope = view === "month" ? "month" : dayjs().date() <= 14 ? "first-half" : "second-half";
 
-  const [incomeTx, expenseTx, categories] = await Promise.all([
+  const [allAccounts, allIncomeTx, allExpenseTx, categories, daddyBalance] = await Promise.all([
+    getAllAccounts(),
     getAllTransactions({ entryType: "INCOME", from: period.start, to: period.end }),
     getAllTransactions({ entryType: "EXPENSE", from: period.start, to: period.end }),
     getExpenseCategoriesWithProgress(period, targetScope),
+    getSavingsCategoryBalance("Daddy"),
   ]);
+
+  // Scoped to the spending-money accounts only (Maribank + Cash on Hand) —
+  // matches the dashboard's Extra Money figure exactly. BPI Joint/BPI CC
+  // Payment transactions are excluded here the same way.
+  const spendingAccountIds = new Set(
+    allAccounts.filter((a) => SPENDING_ACCOUNT_NAMES.includes(a.name)).map((a) => a.id)
+  );
+  const incomeTx = allIncomeTx.filter((t) => spendingAccountIds.has(t.accountId));
+  const expenseTx = allExpenseTx.filter((t) => spendingAccountIds.has(t.accountId));
 
   const totalIncome = incomeTx.reduce((s, t) => s + t.amount, 0);
   const totalExpense = expenseTx.reduce((s, t) => s + t.amount, 0);
   const budgetedCategories = categories.filter((c) => c.periodTarget > 0 || c.periodTotal > 0);
   const totalCategoryRemaining = budgetedCategories.reduce((s, c) => s + (c.periodTarget - c.periodTotal), 0);
-  const extraMoney = totalIncome - totalExpense - totalCategoryRemaining;
+  const extraMoney = totalIncome - totalExpense - totalCategoryRemaining + daddyBalance;
 
   return (
     <div className="flex flex-col gap-5 pb-4 lg:mx-auto lg:max-w-lg lg:px-4 lg:pt-6">
@@ -49,7 +64,7 @@ export default async function ExtraMoneyPage({
           {formatMoney(extraMoney)}
         </p>
         <p className="mt-1 text-xs text-zinc-400">
-          {formatMoney(totalIncome)} pumasok − {formatMoney(totalExpense)} nagastos − {formatMoney(totalCategoryRemaining)} pang budget na di pa nagagastos
+          {formatMoney(totalIncome)} pumasok − {formatMoney(totalExpense)} nagastos − {formatMoney(totalCategoryRemaining)} pang budget na di pa nagagastos + {formatMoney(daddyBalance)} ipon ni Daddy
         </p>
       </header>
 
@@ -113,6 +128,20 @@ export default async function ExtraMoneyPage({
             <p className="text-sm text-zinc-400">No budgeted categories this period.</p>
           )}
         </div>
+      </section>
+
+      <section>
+        <div className="flex items-center justify-between px-1 pb-2">
+          <h2 className="text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+            Ipon ni Daddy
+          </h2>
+          <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+            +{formatMoney(daddyBalance)}
+          </span>
+        </div>
+        <p className="px-1 pb-2 text-xs text-zinc-400">
+          Hiwalay na pondo, di kasama sa ordinary na budget flow — dinadagdag sa Extra Money.
+        </p>
       </section>
     </div>
   );

@@ -18,6 +18,14 @@ type ParsedRow = {
   note: string | null;
   isSalaryIncome: boolean;
   rowNumber: number;
+  /// "Monthly Budget / Withdraw" or "Monthly Budget / Deposit" rows (categoryless,
+  /// non-salary) represent cash physically moving between the family's own
+  /// Maribank/Cash on Hand accounts — the sheet logs each leg separately, but the
+  /// app may have already recorded the same real-world movement as one TRANSFER
+  /// transaction instead. Flagged so the matcher checks TRANSFER history before
+  /// reporting these as missing (a lesson from a real duplicate-logging incident —
+  /// see the isInternalTransfer branch below).
+  isInternalTransfer: boolean;
 };
 
 export type ScanRow = {
@@ -38,6 +46,12 @@ export type ScanResult = {
   matched?: number;
   missingFromApp?: ScanRow[];
   extraInApp?: ScanRow[];
+  /// Internal-transfer-shaped rows (Monthly Budget Withdraw/Deposit) that don't
+  /// exactly match an INCOME/EXPENSE in the app, but a TRANSFER transaction
+  /// exists on the same account/day — most likely already covered under a
+  /// different amount grouping. Never offered a one-tap "Log this": logging
+  /// these blind risks double-counting a transfer that's already there.
+  possibleTransfers?: ScanRow[];
 };
 
 // The sheet uses these short account labels consistently — mapped explicitly
@@ -93,6 +107,7 @@ function mapRow(row: ExcelJS.Row, rowNumber: number): ParsedRow | null {
   let entryType: EntryType;
   let categoryName: string | null = null;
   let isSalaryIncome = false;
+  let isInternalTransfer = false;
 
   if (entryKey === "expense") {
     entryType = "EXPENSE";
@@ -109,8 +124,16 @@ function mapRow(row: ExcelJS.Row, rowNumber: number): ParsedRow | null {
       isSalaryIncome = true;
     } else if (/deposit/i.test(typeStr)) {
       entryType = "INCOME";
+      isInternalTransfer = true;
     } else if (/withdraw/i.test(typeStr)) {
       entryType = "EXPENSE";
+      isInternalTransfer = true;
+    } else if (typeStr) {
+      // A category name in the Type column (e.g. "Motor/Car Gas/Diesel") — a
+      // real category expense, not a plain withdraw/deposit. Previously
+      // silently dropped here, which hid genuine rows from every scan.
+      entryType = "EXPENSE";
+      categoryName = typeStr;
     } else {
       return null;
     }
@@ -118,7 +141,7 @@ function mapRow(row: ExcelJS.Row, rowNumber: number): ParsedRow | null {
     return null;
   }
 
-  return { date: dateValue, accountName, entryType, categoryName, amount, note, isSalaryIncome, rowNumber };
+  return { date: dateValue, accountName, entryType, categoryName, amount, note, isSalaryIncome, rowNumber, isInternalTransfer };
 }
 
 export async function scanSheet(formData: FormData): Promise<ScanResult> {
@@ -164,6 +187,7 @@ export async function scanSheet(formData: FormData): Promise<ScanResult> {
   const accountByName = new Map(accounts.map((a) => [a.name, a]));
   const claimed = new Set<string>();
   const missingFromApp: ScanRow[] = [];
+  const possibleTransfers: ScanRow[] = [];
 
   for (const row of parsedRows) {
     const account = accountByName.get(row.accountName);
@@ -184,18 +208,44 @@ export async function scanSheet(formData: FormData): Promise<ScanResult> {
 
     if (match) {
       claimed.add(match.id);
-    } else {
-      missingFromApp.push({
-        row: row.rowNumber,
-        date: dayjs(row.date).format("YYYY-MM-DD"),
-        account: row.accountName,
-        entryType: row.entryType,
-        category: row.categoryName,
-        amount: row.amount,
-        note: row.note,
-        isSalaryIncome: row.isSalaryIncome,
-      });
+      continue;
     }
+
+    const scanRow: ScanRow = {
+      row: row.rowNumber,
+      date: dayjs(row.date).format("YYYY-MM-DD"),
+      account: row.accountName,
+      entryType: row.entryType,
+      category: row.categoryName,
+      amount: row.amount,
+      note: row.note,
+      isSalaryIncome: row.isSalaryIncome,
+    };
+
+    // Internal-transfer-shaped row with no exact INCOME/EXPENSE match — before
+    // calling it missing, check whether a TRANSFER already covers this account
+    // on this day. The sheet logs each leg of a Maribank<->Cash on Hand move
+    // separately (and doesn't always group amounts the same way the app's own
+    // TRANSFER entries do), so an exact amount match isn't required here —
+    // just evidence the movement was already recorded some other way. This
+    // exists because an earlier reconciliation pass logged brand-new
+    // INCOME/EXPENSE pairs for rows exactly like this without checking for an
+    // existing TRANSFER first, silently double-counting real money.
+    if (row.isInternalTransfer) {
+      const relatedTransfer = dbTx.find(
+        (t) =>
+          t.entryType === "TRANSFER" &&
+          (t.accountId === account.id || t.toAccountId === account.id) &&
+          t.date >= dayStart &&
+          t.date <= dayEnd
+      );
+      if (relatedTransfer) {
+        possibleTransfers.push(scanRow);
+        continue;
+      }
+    }
+
+    missingFromApp.push(scanRow);
   }
 
   const extraInApp: ScanRow[] = dbTx
@@ -213,9 +263,10 @@ export async function scanSheet(formData: FormData): Promise<ScanResult> {
 
   return {
     totalRows: parsedRows.length,
-    matched: parsedRows.length - missingFromApp.length,
+    matched: parsedRows.length - missingFromApp.length - possibleTransfers.length,
     missingFromApp,
     extraInApp,
+    possibleTransfers,
   };
 }
 

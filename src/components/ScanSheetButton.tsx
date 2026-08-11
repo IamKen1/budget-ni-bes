@@ -66,6 +66,9 @@ export function ScanSheetButton() {
           <p className="px-1 text-xs text-zinc-400">
             {result.totalRows} rows in sheet · {result.matched} already match · {result.missingFromApp?.length ?? 0}{" "}
             missing here · {result.extraInApp?.length ?? 0} not found in sheet
+            {result.possibleTransfers && result.possibleTransfers.length > 0
+              ? ` · ${result.possibleTransfers.length} possible transfer${result.possibleTransfers.length === 1 ? "" : "s"} to verify`
+              : ""}
           </p>
 
           {result.missingFromApp && result.missingFromApp.length > 0 && (
@@ -78,15 +81,31 @@ export function ScanSheetButton() {
             />
           )}
 
+          {result.possibleTransfers && result.possibleTransfers.length > 0 && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/40 dark:bg-amber-950/20">
+              <p className="px-1 pb-1 text-xs font-semibold text-amber-700 dark:text-amber-400">
+                Possible transfers — verify manually ({result.possibleTransfers.length})
+              </p>
+              <p className="px-1 pb-2 text-[11px] text-amber-700/80 dark:text-amber-400/70">
+                These look like Maribank ↔ Cash on Hand transfers already recorded here under a different amount
+                grouping. No one-tap logging for these — check Transfers before adding anything, to avoid
+                double-counting.
+              </p>
+              <ResultGroup title="" tone="amber" rows={result.possibleTransfers} hideTitle />
+            </div>
+          )}
+
           {result.extraInApp && result.extraInApp.length > 0 && (
             <ResultGroup title="Logged here, not found in the sheet" tone="zinc" rows={result.extraInApp} />
           )}
 
-          {result.missingFromApp?.length === 0 && result.extraInApp?.length === 0 && (
-            <p className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400">
-              Everything matches — no differences found.
-            </p>
-          )}
+          {result.missingFromApp?.length === 0 &&
+            result.extraInApp?.length === 0 &&
+            (result.possibleTransfers?.length ?? 0) === 0 && (
+              <p className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400">
+                Everything matches — no differences found.
+              </p>
+            )}
         </div>
       )}
     </div>
@@ -103,22 +122,32 @@ function ResultGroup({
   rows,
   loggedRows,
   onLogged,
+  hideTitle,
 }: {
   title: string;
   tone: "amber" | "zinc";
   rows: ScanRow[];
   loggedRows?: Set<string>;
   onLogged?: (key: string) => void;
+  hideTitle?: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-      <p
-        className={`px-1 pb-2 text-xs font-semibold ${
-          tone === "amber" ? "text-amber-600 dark:text-amber-400" : "text-zinc-500 dark:text-zinc-400"
-        }`}
-      >
-        {title} ({rows.length})
-      </p>
+    <div
+      className={
+        hideTitle
+          ? "flex flex-col gap-1"
+          : "rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+      }
+    >
+      {!hideTitle && (
+        <p
+          className={`px-1 pb-2 text-xs font-semibold ${
+            tone === "amber" ? "text-amber-600 dark:text-amber-400" : "text-zinc-500 dark:text-zinc-400"
+          }`}
+        >
+          {title} ({rows.length})
+        </p>
+      )}
       <div className="flex flex-col gap-1">
         {rows.map((r, i) => (
           <ScanRowItem key={rowKey(r, i)} rowKey={rowKey(r, i)} row={r} logged={loggedRows?.has(rowKey(r, i))} onLogged={onLogged} />
