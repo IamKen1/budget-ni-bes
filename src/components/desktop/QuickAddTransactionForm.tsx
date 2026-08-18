@@ -179,7 +179,7 @@ export function QuickAddTransactionForm({
                   ))}
                 </select>
               </Field>
-            ) : (
+            ) : categoryKind !== null ? (
               <Field label="Category">
                 <select name="categoryId" required className={inputClass}>
                   {filteredCategories.map((c) => (
@@ -189,7 +189,7 @@ export function QuickAddTransactionForm({
                   ))}
                 </select>
               </Field>
-            )}
+            ) : null}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -244,7 +244,7 @@ export function QuickAddTransactionForm({
                   </option>
                 ))}
               </select>
-            ) : (
+            ) : categoryKind !== null ? (
               <select name="categoryId" required className={`${inputClass} col-span-1`}>
                 {filteredCategories.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -252,6 +252,8 @@ export function QuickAddTransactionForm({
                   </option>
                 ))}
               </select>
+            ) : (
+              <div className={`${inputClass} col-span-1 flex items-center text-zinc-400`}>—</div>
             )}
 
             <input

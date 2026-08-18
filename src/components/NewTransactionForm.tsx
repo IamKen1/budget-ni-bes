@@ -140,7 +140,7 @@ export function NewTransactionForm({
               ))}
             </select>
           </Field>
-        ) : (
+        ) : categoryKind !== null ? (
           <Field label="Category">
             <select
               name="categoryId"
@@ -154,7 +154,7 @@ export function NewTransactionForm({
               ))}
             </select>
           </Field>
-        )}
+        ) : null}
 
         <Field label="Who">
           <div className="grid grid-cols-3 gap-2">
