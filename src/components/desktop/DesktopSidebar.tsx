@@ -30,10 +30,8 @@ export function DesktopSidebar({
   periodLabel,
   totalBalance,
   extraMoney,
-  spendingIncome,
-  spendingExpense,
+  spendingBalance,
   totalCategoryRemaining,
-  daddyBalance,
   personSpend,
   totalPersonSpend,
   accounts,
@@ -46,10 +44,8 @@ export function DesktopSidebar({
   periodLabel: string;
   totalBalance: number;
   extraMoney: number;
-  spendingIncome: number;
-  spendingExpense: number;
+  spendingBalance: number;
   totalCategoryRemaining: number;
-  daddyBalance: number;
   personSpend: Record<Person, number>;
   totalPersonSpend: number;
   accounts: (SerializedAccount & { balance: number })[];
@@ -146,8 +142,8 @@ export function DesktopSidebar({
             <MaskableAmount value={extraMoney} />
           </p>
           <p className="mt-0.5 text-[9px] leading-snug text-emerald-100/80 underline decoration-emerald-100/30 underline-offset-2">
-            <MaskableAmount value={spendingIncome} /> pumasok, <MaskableAmount value={spendingExpense} /> nagastos,{" "}
-            <MaskableAmount value={totalCategoryRemaining} /> pang budget, +<MaskableAmount value={daddyBalance} /> ipon ni Daddy
+            <MaskableAmount value={spendingBalance} /> sa Maribank + COH,{" "}
+            <MaskableAmount value={totalCategoryRemaining} /> pang budget
           </p>
         </Link>
       </div>

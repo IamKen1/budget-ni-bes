@@ -5,8 +5,7 @@ import {
   getAccountsWithBalances,
   getExpenseCategoriesWithProgress,
   getLoanPaymentsByMonth,
-  getSpendingAccountsCashFlow,
-  getSavingsCategoryBalance,
+  computeExtraMoney,
   monthRange,
   cutoffRange,
   literalCutoffHalf,
@@ -84,7 +83,7 @@ export const toolDefinitions = [
     function: {
       name: "get_budget_progress",
       description:
-        "Get expense categories with their target, how much has been spent so far, and how much is left — plus periodStart/periodEnd/periodLabel, totalIncome, and totalExpense for the period. Defaults to the CURRENT CUTOFF (the family's real semi-monthly budgeting period, e.g. 'ngayong cutoff') — pass period 'month' only if the user explicitly asks about the whole month. For any 'may sobra ba kami' / 'float money' / 'pwede pa ba gumastos' question, use totalIncome and totalExpense here (NOT the per-category targets) — see the system prompt's float-money rule for the exact formula.",
+        "Get expense categories with their target, how much has been spent so far, and how much is left — plus periodStart/periodEnd/periodLabel and a ready-made extraMoney figure for the period. Defaults to the CURRENT CUTOFF (the family's real semi-monthly budgeting period, e.g. 'ngayong cutoff') — pass period 'month' only if the user explicitly asks about the whole month. For any 'may sobra ba kami' / 'float money' / 'pwede pa ba gumastos' question, use the extraMoney field directly here (NOT the per-category targets, NOT computed yourself) — see the system prompt's float-money rule.",
       parameters: {
         type: "object",
         properties: {
@@ -400,10 +399,9 @@ async function toolGetBudgetProgress(args?: { period?: "cutoff" | "month" }) {
   const targetScope: TargetScope =
     period === "month" ? "month" : dayjs().date() <= 14 ? "first-half" : "second-half";
 
-  const [categories, spendingCashFlow, daddyBalance] = await Promise.all([
+  const [categories, accounts] = await Promise.all([
     getExpenseCategoriesWithProgress(range, targetScope),
-    getSpendingAccountsCashFlow(range),
-    getSavingsCategoryBalance("Daddy"),
+    getAccountsWithBalances(),
   ]);
   const rows = categories
     .filter((c) => c.periodTarget > 0 || c.periodTotal > 0)
@@ -416,29 +414,29 @@ async function toolGetBudgetProgress(args?: { period?: "cutoff" | "month" }) {
     }));
 
   const totalTarget = rows.reduce((s, r) => s + r.target, 0);
-  const totalCategoryRemaining = rows.reduce((s, r) => s + r.remaining, 0);
+  const { spendingBalance, categoryRemaining, extraMoney, overBudgetCategories } = computeExtraMoney(
+    accounts,
+    categories
+  );
 
   return {
     period,
     periodLabel: range.label,
     periodStart: dayjs(range.start).format("YYYY-MM-DD"),
     periodEnd: dayjs(range.end).format("YYYY-MM-DD"),
-    // Scoped to the spending-money accounts only (Maribank + Cash on Hand) —
-    // matches the family's own "1-15 CUTOFF" sheet, which never touches BPI
-    // Joint/BPI CC Payment for this figure.
-    totalIncome: spendingCashFlow.income,
-    totalExpense: spendingCashFlow.expense,
     totalTarget,
-    // Sum of (target − spent) across every category — verified directly
-    // against the family's own spreadsheet (Summary Per Cutoff: REMAINING +
-    // TOTAL EXPENSE VARIANCE). For any "float money" / "sobra ba kami"
-    // question: extra money = (totalIncome − totalExpense) − totalCategoryRemaining + daddyBalance.
-    // No loans involved — the family's own sheet doesn't cross-reference loan
-    // schedules for this figure, so don't add that subtraction yourself.
-    totalCategoryRemaining,
-    // "Daddy" ipon — a separate savings fund outside the normal category
-    // flow, added back on top of the float-money figure above.
-    daddyBalance,
+    // "Extra Money" — real spendable cash right now: current balance of the
+    // spending-money accounts (Maribank + Cash on Hand) minus whatever's
+    // still earmarked for categories that haven't gone over budget yet this
+    // period. Categories already over budget are excluded from that
+    // subtraction — their overspend already came straight out of the real
+    // balance, so reserving for them again would double count it. Verified
+    // against the family's own numbers — use extraMoney directly, don't
+    // recompute it yourself from other tools or fields.
+    spendingBalance,
+    totalCategoryRemaining: categoryRemaining,
+    overBudgetCategoryCount: overBudgetCategories.length,
+    extraMoney,
     // For loan questions only (unrelated to the float-money formula above) —
     // match against get_loan_payments' dueCutoff field to find what's due
     // "ngayong cutoff". Loan cutoffs group the 15th literally (into "1-15"),

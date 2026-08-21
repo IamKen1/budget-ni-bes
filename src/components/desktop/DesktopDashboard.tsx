@@ -18,10 +18,8 @@ export function DesktopDashboard({
   periodLabel,
   totalBalance,
   extraMoney,
-  spendingIncome,
-  spendingExpense,
+  spendingBalance,
   totalCategoryRemaining,
-  daddyBalance,
   personSpend,
   totalPersonSpend,
   accounts,
@@ -35,10 +33,8 @@ export function DesktopDashboard({
   periodLabel: string;
   totalBalance: number;
   extraMoney: number;
-  spendingIncome: number;
-  spendingExpense: number;
+  spendingBalance: number;
   totalCategoryRemaining: number;
-  daddyBalance: number;
   personSpend: Record<Person, number>;
   totalPersonSpend: number;
   accounts: (SerializedAccount & { balance: number })[];
@@ -56,10 +52,8 @@ export function DesktopDashboard({
           periodLabel={periodLabel}
           totalBalance={totalBalance}
           extraMoney={extraMoney}
-          spendingIncome={spendingIncome}
-          spendingExpense={spendingExpense}
+          spendingBalance={spendingBalance}
           totalCategoryRemaining={totalCategoryRemaining}
-          daddyBalance={daddyBalance}
           personSpend={personSpend}
           totalPersonSpend={totalPersonSpend}
           accounts={accounts}

@@ -330,54 +330,43 @@ export async function getPeriodSummary(range: DateRange = monthRange()) {
 
 // The family's own cutoff summary only ever tracks Maribank + Cash on Hand —
 // their two "spending money" accounts. BPI Joint/BPI CC Payment are savings
-// and credit-card-payment accounts respectively, deliberately excluded from
-// this cash-flow figure (matches their sheet's "1-15 CUTOFF" tab, which has
-// no BPI column at all).
-const SPENDING_ACCOUNT_NAMES = ["Maribank", "Cash on Hand"];
+// and credit-card-payment accounts respectively, deliberately excluded here
+// (matches their sheet's "1-15 CUTOFF" tab, which has no BPI column at all).
+export const SPENDING_ACCOUNT_NAMES = ["Maribank", "Cash on Hand"];
 
-/** Income/expense cash flow for this period, restricted to the spending-money
- * accounts (Maribank + Cash on Hand) — the basis for "Extra Money", matching
- * the family's own sheet exactly (their REMAINING row never touches BPI). */
-export async function getSpendingAccountsCashFlow(range: DateRange = monthRange()) {
-  const { start, end } = range;
-  const accounts = await prisma.account.findMany({ where: { name: { in: SPENDING_ACCOUNT_NAMES } } });
-  const accountIds = accounts.map((a) => a.id);
+export type ExtraMoneyBreakdown = {
+  spendingBalance: number;
+  /// Sum of (target − spent) across every category that hasn't gone over its
+  /// budget yet this period — money still earmarked for its own category,
+  /// not free even though it's sitting in the account.
+  categoryRemaining: number;
+  /// Categories already over budget, excluded from categoryRemaining above —
+  /// their overspend already came straight out of the real account balance,
+  /// so reserving for them again would double count it.
+  overBudgetCategories: CategoryProgress[];
+  extraMoney: number;
+};
 
-  const transactions = await prisma.transaction.findMany({
-    where: {
-      accountId: { in: accountIds },
-      entryType: { in: ["INCOME", "EXPENSE"] },
-      OR: [{ date: { gte: start, lte: end } }, { periodOverride: { gte: start, lte: end } }],
-    },
-  });
-
-  let income = 0;
-  let expense = 0;
-  for (const tx of transactions) {
-    const d = effectiveDate(tx);
-    if (d < start || d > end) continue;
-    const amount = toNumber(tx.amount);
-    if (tx.entryType === "INCOME") income += amount;
-    if (tx.entryType === "EXPENSE") expense += amount;
-  }
-
-  return { income, expense };
-}
-
-/** All-time net balance of a single savings category by name — used for funds
- * that sit outside the normal spending/category flow (e.g. "Daddy" ipon). */
-export async function getSavingsCategoryBalance(name: string): Promise<number> {
-  const category = await prisma.category.findUnique({
-    where: { name },
-    include: { transactions: { where: { entryType: { in: ["SAVINGS_DEPOSIT", "SAVINGS_WITHDRAW"] } } } },
-  });
-  if (!category) return 0;
-  let total = 0;
-  for (const tx of category.transactions) {
-    const amount = toNumber(tx.amount);
-    total += tx.entryType === "SAVINGS_WITHDRAW" ? -amount : amount;
-  }
-  return total;
+/** "Extra Money" — real spendable cash right now: the actual current balance
+ * of the spending-money accounts (Maribank + Cash on Hand — already reflects
+ * every real deposit, expense, transfer, and fund like Daddy's ipon, with no
+ * date-range reconstruction needed) minus whatever's still earmarked for
+ * categories that haven't gone over their budget yet this period. Verified
+ * directly against the family's own numbers. Pure function — pass in
+ * getAccountsWithBalances() and getExpenseCategoriesWithProgress() results. */
+export function computeExtraMoney(
+  accounts: (SerializedAccount & { balance: number })[],
+  expenseCategories: CategoryProgress[]
+): ExtraMoneyBreakdown {
+  const spendingBalance = accounts
+    .filter((a) => SPENDING_ACCOUNT_NAMES.includes(a.name))
+    .reduce((s, a) => s + a.balance, 0);
+  const budgeted = expenseCategories.filter((c) => c.periodTarget > 0);
+  const overBudgetCategories = budgeted.filter((c) => c.periodTotal > c.periodTarget);
+  const categoryRemaining = budgeted
+    .filter((c) => c.periodTotal <= c.periodTarget)
+    .reduce((s, c) => s + (c.periodTarget - c.periodTotal), 0);
+  return { spendingBalance, categoryRemaining, overBudgetCategories, extraMoney: spendingBalance - categoryRemaining };
 }
 
 export async function getPersonSpendBreakdown(
