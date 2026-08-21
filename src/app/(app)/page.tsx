@@ -316,9 +316,16 @@ export default async function DashboardPage({
       </section>
 
       <section>
-        <h2 className="px-1 text-sm font-semibold text-zinc-500 dark:text-zinc-400">
-          Savings Goals
-        </h2>
+        <div className="flex items-center justify-between px-1">
+          <h2 className="text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+            Savings Goals
+          </h2>
+          {savingsCategories.length > 4 && (
+            <Link href="/categories" className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
+              See more
+            </Link>
+          )}
+        </div>
         <div className="mt-2 flex flex-col gap-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           {savingsCategories.slice(0, 4).map((category) => (
             <Link key={category.id} href={`/transactions?categoryId=${category.id}`} className="block">

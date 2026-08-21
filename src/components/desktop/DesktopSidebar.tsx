@@ -329,9 +329,16 @@ export function DesktopSidebar({
 
       {savingsCategories.length > 0 && (
         <section className="mt-3">
-          <h2 className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
-            Savings Goals
-          </h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+              Savings Goals
+            </h2>
+            {savingsCategories.length > 4 && (
+              <Link href="/categories" className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                See more
+              </Link>
+            )}
+          </div>
           <div className="mt-1.5 flex flex-col gap-2.5">
             {savingsCategories.slice(0, 4).map((c) => (
               <Link key={c.id} href={`/transactions?categoryId=${c.id}`} className="block">
