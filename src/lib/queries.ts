@@ -560,7 +560,9 @@ export async function getLoanPaymentsByMonth(): Promise<LoanPaymentMonthGroup[]>
       };
       groups.set(monthKey, group);
     }
-    group.total += serialized.amount;
+    // Excludes already-paid (checked) payments — "Upcoming Payments" should
+    // reflect what's still owed this month, not what's already settled.
+    if (!serialized.paid) group.total += serialized.amount;
     group.remainingBalance += serialized.remainingBalance ?? 0;
     group.payments.push(serialized);
   }
