@@ -70,6 +70,7 @@ export default async function DashboardPage({
   const totalBalance = accounts.reduce((sum, a) => sum + a.balance, 0);
   const cutoff = currentCutoffLabel();
   const totalPersonSpend = personSpend.JENNA + personSpend.KENNETH + personSpend.SHARED;
+  const budgetedCategories = expenseCategories.filter((c) => c.periodTarget > 0);
 
   // "Extra money" — verified directly against the family's own spreadsheet
   // (Summary Per Cutoff: REMAINING + TOTAL EXPENSE VARIANCE + Daddy ipon).
@@ -293,23 +294,23 @@ export default async function DashboardPage({
           <h2 className="text-sm font-semibold text-zinc-500 dark:text-zinc-400">
             Budget {view === "month" ? "This Month" : "This Cutoff"}
           </h2>
-          <Link href="/categories" className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
-            View all
-          </Link>
+          {budgetedCategories.length > 4 && (
+            <Link href="/categories" className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
+              See more
+            </Link>
+          )}
         </div>
         <div className="mt-2 grid grid-cols-2 gap-3">
-          {expenseCategories
-            .filter((c) => c.periodTarget > 0)
-            .map((category) => (
-              <CategoryBudgetCard
-                key={category.id}
-                id={category.id}
-                name={category.name}
-                value={category.periodTotal}
-                target={category.periodTarget}
-              />
-            ))}
-          {expenseCategories.filter((c) => c.periodTarget > 0).length === 0 && (
+          {budgetedCategories.slice(0, 4).map((category) => (
+            <CategoryBudgetCard
+              key={category.id}
+              id={category.id}
+              name={category.name}
+              value={category.periodTotal}
+              target={category.periodTarget}
+            />
+          ))}
+          {budgetedCategories.length === 0 && (
             <p className="col-span-2 text-sm text-zinc-400">No expense categories yet.</p>
           )}
         </div>

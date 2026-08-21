@@ -60,6 +60,7 @@ export function DesktopSidebar({
   const { filter, setFilter } = useDesktopFilter();
   const { visible } = useBalanceVisibility();
   const money = (n: number) => (visible ? formatMoney(n) : "₱ • • •");
+  const budgetedCategories = expenseCategories.filter((c) => c.periodTarget > 0);
 
   return (
     <aside className="flex w-72 flex-shrink-0 flex-col overflow-y-auto border-r border-zinc-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-950">
@@ -274,30 +275,35 @@ export function DesktopSidebar({
       )}
 
       <section className="mt-3">
-        <h2 className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
-          Budget {view === "month" ? "This Month" : "This Cutoff"}
-        </h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+            Budget {view === "month" ? "This Month" : "This Cutoff"}
+          </h2>
+          {budgetedCategories.length > 4 && (
+            <Link href="/categories" className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+              See more
+            </Link>
+          )}
+        </div>
         <div className="mt-1.5 flex flex-col gap-2.5">
-          {expenseCategories
-            .filter((c) => c.periodTarget > 0)
-            .map((c) => {
-              const active = filter?.type === "category" && filter.id === c.id;
-              return (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() =>
-                    setFilter(active ? null : { type: "category", id: c.id, label: c.name })
-                  }
-                  className={`rounded-lg p-1 text-left transition ${
-                    active ? "bg-emerald-50 dark:bg-emerald-950/40" : "hover:bg-zinc-50 dark:hover:bg-zinc-900"
-                  }`}
-                >
-                  <ProgressBar label={c.name} value={c.periodTotal} target={c.periodTarget} />
-                </button>
-              );
-            })}
-          {expenseCategories.filter((c) => c.periodTarget > 0).length === 0 && (
+          {budgetedCategories.slice(0, 4).map((c) => {
+            const active = filter?.type === "category" && filter.id === c.id;
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() =>
+                  setFilter(active ? null : { type: "category", id: c.id, label: c.name })
+                }
+                className={`rounded-lg p-1 text-left transition ${
+                  active ? "bg-emerald-50 dark:bg-emerald-950/40" : "hover:bg-zinc-50 dark:hover:bg-zinc-900"
+                }`}
+              >
+                <ProgressBar label={c.name} value={c.periodTotal} target={c.periodTarget} />
+              </button>
+            );
+          })}
+          {budgetedCategories.length === 0 && (
             <p className="text-xs text-zinc-400">No expense categories yet.</p>
           )}
         </div>
