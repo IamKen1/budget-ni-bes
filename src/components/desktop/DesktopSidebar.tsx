@@ -21,17 +21,21 @@ import { AddCategoryForm } from "@/components/AddCategoryForm";
 import { toggleArchiveAccount } from "@/lib/actions/accounts";
 import { toggleArchiveCategory } from "@/lib/actions/categories";
 import { useDesktopFilter } from "@/components/desktop/DesktopFilterContext";
+import { personLabel } from "@/lib/labels";
+import type { Person } from "@/generated/prisma/client";
 
 export function DesktopSidebar({
   view,
   cutoff,
   periodLabel,
-  periodStart,
-  periodEnd,
   totalBalance,
-  income,
-  expense,
-  saved,
+  extraMoney,
+  spendingIncome,
+  spendingExpense,
+  totalCategoryRemaining,
+  daddyBalance,
+  personSpend,
+  totalPersonSpend,
   accounts,
   expenseCategories,
   savingsCategories,
@@ -40,12 +44,14 @@ export function DesktopSidebar({
   view: "cutoff" | "month";
   cutoff: string;
   periodLabel: string;
-  periodStart: string;
-  periodEnd: string;
   totalBalance: number;
-  income: number;
-  expense: number;
-  saved: number;
+  extraMoney: number;
+  spendingIncome: number;
+  spendingExpense: number;
+  totalCategoryRemaining: number;
+  daddyBalance: number;
+  personSpend: Record<Person, number>;
+  totalPersonSpend: number;
   accounts: (SerializedAccount & { balance: number })[];
   expenseCategories: CategoryProgress[];
   savingsCategories: CategoryProgress[];
@@ -128,27 +134,44 @@ export function DesktopSidebar({
         <p className="text-lg font-semibold tracking-tight">
           <MaskableAmount value={totalBalance} />
         </p>
-        <div className="mt-1.5 flex gap-3 text-[10px]">
-          <Link
-            href={`/transactions?entryType=INCOME&from=${periodStart}&to=${periodEnd}&label=${encodeURIComponent(`Deposits — ${periodLabel}`)}`}
-            className="active:opacity-70"
-          >
-            <p className="text-emerald-100 underline decoration-emerald-100/40 underline-offset-2">Deposits</p>
-            <p className="font-semibold"><MaskableAmount value={income} /></p>
-          </Link>
-          <Link
-            href={`/transactions?entryType=EXPENSE&from=${periodStart}&to=${periodEnd}&label=${encodeURIComponent(`Expenses — ${periodLabel}`)}`}
-            className="active:opacity-70"
-          >
-            <p className="text-emerald-100 underline decoration-emerald-100/40 underline-offset-2">Expenses</p>
-            <p className="font-semibold"><MaskableAmount value={expense} /></p>
-          </Link>
-          <div>
-            <p className="text-emerald-100">Saved</p>
-            <p className="font-semibold"><MaskableAmount value={saved} /></p>
-          </div>
-        </div>
+        <Link
+          href={`/extra-money?view=${view}`}
+          className="mt-2 block rounded-lg bg-white/10 p-2 transition active:scale-[0.98]"
+        >
+          <p className="text-[10px] font-medium text-emerald-100">
+            Extra Money — {view === "month" ? "This Month" : "This Cutoff"}
+          </p>
+          <p className={`text-sm font-semibold ${extraMoney < 0 ? "text-red-200" : "text-white"}`}>
+            <MaskableAmount value={extraMoney} />
+          </p>
+          <p className="mt-0.5 text-[9px] leading-snug text-emerald-100/80 underline decoration-emerald-100/30 underline-offset-2">
+            <MaskableAmount value={spendingIncome} /> pumasok, <MaskableAmount value={spendingExpense} /> nagastos,{" "}
+            <MaskableAmount value={totalCategoryRemaining} /> pang budget, +<MaskableAmount value={daddyBalance} /> ipon ni Daddy
+          </p>
+        </Link>
       </div>
+
+      {accounts.filter((a) => a.monthlyTarget > 0).length > 0 && (
+        <section className="mt-3">
+          <h2 className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+            Spending Money
+          </h2>
+          <div className="mt-1.5 flex flex-col gap-2.5">
+            {accounts
+              .filter((a) => a.monthlyTarget > 0)
+              .map((a) => (
+                <Link key={a.id} href={`/transactions?accountId=${a.id}`} className="block">
+                  <ProgressBar
+                    label={`${a.name} — spending money`}
+                    value={a.balance}
+                    target={a.monthlyTarget}
+                    leftValue={a.balance}
+                  />
+                </Link>
+              ))}
+          </div>
+        </section>
+      )}
 
       <section className="mt-3">
         <div className="flex items-center justify-between">
@@ -226,29 +249,55 @@ export function DesktopSidebar({
         </section>
       )}
 
+      {totalPersonSpend > 0 && (
+        <section className="mt-3">
+          <h2 className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+            Spending by Person
+          </h2>
+          <div className="mt-1.5 flex gap-3">
+            {(["JENNA", "KENNETH", "SHARED"] as const).map((p) => (
+              <div key={p} className="flex-1">
+                <p className="text-[10px] font-medium text-zinc-400">{personLabel[p]}</p>
+                <p className="mt-0.5 text-xs font-semibold">{money(personSpend[p])}</p>
+                <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
+                  <div
+                    className="h-full rounded-full bg-zinc-900 dark:bg-zinc-100"
+                    style={{
+                      width: `${totalPersonSpend > 0 ? Math.round((personSpend[p] / totalPersonSpend) * 100) : 0}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section className="mt-3">
         <h2 className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
           Budget {view === "month" ? "This Month" : "This Cutoff"}
         </h2>
         <div className="mt-1.5 flex flex-col gap-2.5">
-          {expenseCategories.slice(0, 4).map((c) => {
-            const active = filter?.type === "category" && filter.id === c.id;
-            return (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() =>
-                  setFilter(active ? null : { type: "category", id: c.id, label: c.name })
-                }
-                className={`rounded-lg p-1 text-left transition ${
-                  active ? "bg-emerald-50 dark:bg-emerald-950/40" : "hover:bg-zinc-50 dark:hover:bg-zinc-900"
-                }`}
-              >
-                <ProgressBar label={c.name} value={c.periodTotal} target={c.periodTarget} />
-              </button>
-            );
-          })}
-          {expenseCategories.length === 0 && (
+          {expenseCategories
+            .filter((c) => c.periodTarget > 0)
+            .map((c) => {
+              const active = filter?.type === "category" && filter.id === c.id;
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() =>
+                    setFilter(active ? null : { type: "category", id: c.id, label: c.name })
+                  }
+                  className={`rounded-lg p-1 text-left transition ${
+                    active ? "bg-emerald-50 dark:bg-emerald-950/40" : "hover:bg-zinc-50 dark:hover:bg-zinc-900"
+                  }`}
+                >
+                  <ProgressBar label={c.name} value={c.periodTotal} target={c.periodTarget} />
+                </button>
+              );
+            })}
+          {expenseCategories.filter((c) => c.periodTarget > 0).length === 0 && (
             <p className="text-xs text-zinc-400">No expense categories yet.</p>
           )}
         </div>
@@ -277,6 +326,27 @@ export function DesktopSidebar({
           </div>
         </details>
       </section>
+
+      {savingsCategories.length > 0 && (
+        <section className="mt-3">
+          <h2 className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+            Savings Goals
+          </h2>
+          <div className="mt-1.5 flex flex-col gap-2.5">
+            {savingsCategories.slice(0, 4).map((c) => (
+              <Link key={c.id} href={`/transactions?categoryId=${c.id}`} className="block">
+                <ProgressBar
+                  label={c.name}
+                  value={c.allTimeTotal}
+                  target={c.goalTarget}
+                  tone="emerald"
+                  showVariance={false}
+                />
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
     </aside>
   );
 }

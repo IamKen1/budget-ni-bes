@@ -4,7 +4,6 @@ import {
   getAccountsWithBalances,
   getExpenseCategoriesWithProgress,
   getSavingsCategoriesWithProgress,
-  getPeriodSummary,
   getPersonSpendBreakdown,
   getRecentTransactions,
   getAllTransactions,
@@ -47,7 +46,6 @@ export default async function DashboardPage({
     accounts,
     expenseCategories,
     savingsCategories,
-    summary,
     personSpend,
     recent,
     allTransactions,
@@ -58,7 +56,6 @@ export default async function DashboardPage({
     getAccountsWithBalances(),
     getExpenseCategoriesWithProgress(period, targetScope),
     getSavingsCategoriesWithProgress(period),
-    getPeriodSummary(period),
     getPersonSpendBreakdown(period),
     getRecentTransactions(8),
     getAllTransactions(),
@@ -92,12 +89,14 @@ export default async function DashboardPage({
         view={view}
         cutoff={cutoff}
         periodLabel={period.label}
-        periodStart={period.start.toISOString()}
-        periodEnd={period.end.toISOString()}
         totalBalance={totalBalance}
-        income={summary.income}
-        expense={summary.expense}
-        saved={summary.saved}
+        extraMoney={extraMoney}
+        spendingIncome={spendingCashFlow.income}
+        spendingExpense={spendingCashFlow.expense}
+        totalCategoryRemaining={totalCategoryRemaining}
+        daddyBalance={daddyBalance}
+        personSpend={personSpend}
+        totalPersonSpend={totalPersonSpend}
         accounts={accounts}
         expenseCategories={expenseCategories}
         savingsCategories={savingsCategories}
