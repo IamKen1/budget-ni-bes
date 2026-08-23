@@ -50,7 +50,14 @@ export function TransactionRow({ transaction }: { transaction: SerializedTransac
       className="flex w-full items-center justify-between gap-3 rounded-xl px-2 py-2.5 text-left transition active:bg-zinc-50 dark:active:bg-zinc-800/50"
     >
       <div className="min-w-0">
-        <p className="truncate text-sm font-medium">{title}</p>
+        <p className="flex items-center gap-1.5 truncate text-sm font-medium">
+          <span className="truncate">{title}</span>
+          {transaction.entryType === "SAVINGS_WITHDRAW" && (
+            <span className="flex-shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">
+              Savings Withdrawn
+            </span>
+          )}
+        </p>
         <p className="truncate text-xs text-zinc-400">
           {formatDate(transaction.date)}
           {subtitle ? ` · ${subtitle}` : ""}
