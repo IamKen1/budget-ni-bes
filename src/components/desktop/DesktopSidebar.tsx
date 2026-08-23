@@ -89,6 +89,21 @@ export function DesktopSidebar({
             </Link>
           </div>
           <Link
+            href="/reports"
+            aria-label="Reports"
+            className="flex h-7 w-7 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 transition active:scale-95 dark:bg-zinc-900 dark:text-zinc-400"
+          >
+            <svg viewBox="0 0 24 24" fill="none" className="h-3.5 w-3.5">
+              <path
+                d="M4 19V5m0 14h16M8 19v-6m4 6V9m4 10v-4"
+                stroke="currentColor"
+                strokeWidth={1.8}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </Link>
+          <Link
             href="/settings"
             aria-label="Settings"
             className="flex h-7 w-7 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 transition active:scale-95 dark:bg-zinc-900 dark:text-zinc-400"
