@@ -41,13 +41,15 @@ export default async function ReportsPage({
     rangeLabel = `${start.format("MMM D, YYYY")} – ${end.format("MMM D, YYYY")}`;
   }
 
-  const [incomeTx, expenseTx] = await Promise.all([
+  const [incomeTx, expenseTx, savingsWithdrawTx] = await Promise.all([
     getAllTransactions({ entryType: "INCOME", from: start?.toDate(), to: end?.toDate() }),
     getAllTransactions({ entryType: "EXPENSE", from: start?.toDate(), to: end?.toDate() }),
+    getAllTransactions({ entryType: "SAVINGS_WITHDRAW", from: start?.toDate(), to: end?.toDate() }),
   ]);
 
   const totalIncoming = incomeTx.reduce((s, t) => s + t.amount, 0);
   const totalOutgoing = expenseTx.reduce((s, t) => s + t.amount, 0);
+  const totalWithdrawn = savingsWithdrawTx.reduce((s, t) => s + t.amount, 0);
   const net = totalIncoming - totalOutgoing;
 
   const cutoff = cutoffRange();
@@ -126,16 +128,22 @@ export default async function ReportsPage({
             {formatMoney(totalOutgoing)}
           </p>
         </div>
-      </div>
-      <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-        <p className="text-xs font-medium text-zinc-400">Net</p>
-        <p
-          className={`mt-1 text-xl font-semibold ${
-            net < 0 ? "text-red-500 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"
-          }`}
-        >
-          {formatMoney(net)}
-        </p>
+        <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+          <p className="text-xs font-medium text-zinc-400">Net</p>
+          <p
+            className={`mt-1 text-lg font-semibold ${
+              net < 0 ? "text-red-500 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"
+            }`}
+          >
+            {formatMoney(net)}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+          <p className="text-xs font-medium text-zinc-400">Savings Withdrawn</p>
+          <p className="mt-1 text-lg font-semibold text-amber-600 dark:text-amber-400">
+            {formatMoney(totalWithdrawn)}
+          </p>
+        </div>
       </div>
 
       <section>
@@ -177,6 +185,30 @@ export default async function ReportsPage({
             </div>
           ))}
           {expenseTx.length === 0 && <p className="px-1 text-sm text-zinc-400">Walang outgoing this range.</p>}
+        </div>
+      </section>
+
+      <section>
+        <div className="flex items-center justify-between px-1 pb-2">
+          <h2 className="text-sm font-semibold text-zinc-500 dark:text-zinc-400">Savings Withdrawn</h2>
+          <span className="text-sm font-semibold text-amber-600 dark:text-amber-400">
+            {formatMoney(totalWithdrawn)}
+          </span>
+        </div>
+        <div className="flex flex-col gap-3">
+          {groupByDate(savingsWithdrawTx).map(([date, txs]) => (
+            <div key={date}>
+              <h3 className="px-1 pb-1 text-xs font-semibold uppercase tracking-wide text-zinc-400">{date}</h3>
+              <div className="flex flex-col gap-1 rounded-2xl border border-zinc-200 bg-white p-2 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+                {txs.map((tx) => (
+                  <DeletableTransactionRow key={tx.id} transaction={tx} />
+                ))}
+              </div>
+            </div>
+          ))}
+          {savingsWithdrawTx.length === 0 && (
+            <p className="px-1 text-sm text-zinc-400">Walang savings withdrawal this range.</p>
+          )}
         </div>
       </section>
     </div>
