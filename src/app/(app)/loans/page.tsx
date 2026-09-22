@@ -12,6 +12,10 @@ export default async function LoansPage() {
 
   const activeAccounts = accounts.filter((a) => !a.archived);
   const activeCategories = categories.filter((c) => !c.archived);
+  // getLoanPaymentsByMonth returns soonest-due-month first (needed by the
+  // dashboard's "find the nearest unpaid month" logic) — this page wants the
+  // opposite, newest month on top, so reverse just for display here.
+  const orderedGroups = [...groups].reverse();
 
   return (
     <div className="flex flex-col gap-5 pb-4 lg:mx-auto lg:max-w-lg lg:px-4 lg:pt-6">
@@ -28,7 +32,7 @@ export default async function LoansPage() {
         </div>
       )}
 
-      {groups.map((group) => (
+      {orderedGroups.map((group) => (
         <section key={group.monthKey}>
           <div className="flex items-center justify-between px-1 pb-1.5">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">

@@ -527,7 +527,7 @@ export type LoanPaymentMonthGroup = {
   payments: SerializedLoanPayment[];
 };
 
-/** All upcoming loan/bill installments, grouped by due-date month — newest month first (matches the "Upcoming Payments" schedule). */
+/** All upcoming loan/bill installments, grouped by due-date month — soonest-due month first (needed by callers that pick "the nearest unpaid month"). Reverse the result if a caller wants newest-month-first display instead. */
 export async function getLoanPaymentsByMonth(): Promise<LoanPaymentMonthGroup[]> {
   const loans = await prisma.loanPayment.findMany({
     orderBy: [{ dueDate: "asc" }, { sortOrder: "asc" }],
