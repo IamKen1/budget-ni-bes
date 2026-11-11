@@ -261,6 +261,15 @@ export async function getExpenseCategoriesWithProgress(
   });
 }
 
+/** Archived categories (both kinds) — just enough to list them and offer Restore. */
+export async function getArchivedCategories(): Promise<Pick<Category, "id" | "name" | "kind">[]> {
+  return prisma.category.findMany({
+    where: { archived: true },
+    orderBy: [{ kind: "asc" }, { name: "asc" }],
+    select: { id: true, name: true, kind: true },
+  });
+}
+
 export async function getSavingsCategoriesWithProgress(
   range: DateRange = monthRange()
 ): Promise<CategoryProgress[]> {

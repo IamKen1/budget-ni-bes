@@ -3,6 +3,7 @@ import { getRecentActivity } from "@/lib/actions/activity";
 import { ActivityRow } from "@/components/ActivityRow";
 import { ClearDataForm } from "@/components/ClearDataForm";
 import { ScanSheetButton } from "@/components/ScanSheetButton";
+import { logout } from "@/lib/actions/session";
 
 export default async function SettingsPage({
   searchParams,
@@ -100,6 +101,29 @@ export default async function SettingsPage({
             />
           </svg>
         </a>
+      </section>
+
+      <section>
+        <h2 className="px-1 pb-2 text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+          Account
+        </h2>
+        <form action={logout}>
+          <button
+            type="submit"
+            className="flex w-full items-center justify-between rounded-2xl border border-zinc-200 bg-white p-4 text-left shadow-sm transition active:scale-[0.99] dark:border-zinc-800 dark:bg-zinc-900"
+          >
+            <span className="text-sm font-medium">Log out</span>
+            <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5 flex-shrink-0 text-zinc-400">
+              <path
+                d="M9 21H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3M16 17l5-5-5-5M21 12H9"
+                stroke="currentColor"
+                strokeWidth={1.8}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        </form>
       </section>
 
       <section>

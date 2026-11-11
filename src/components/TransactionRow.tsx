@@ -22,7 +22,14 @@ const entrySign: Record<string, string> = {
   TRANSFER: "",
 };
 
-export function TransactionRow({ transaction }: { transaction: SerializedTransaction }) {
+export function TransactionRow({
+  transaction,
+  hideDate = false,
+}: {
+  transaction: SerializedTransaction;
+  /** Set when the list already groups rows under a day heading. */
+  hideDate?: boolean;
+}) {
   const { open } = useTransactionDetail();
   const { visible } = useBalanceVisibility();
 
@@ -59,8 +66,7 @@ export function TransactionRow({ transaction }: { transaction: SerializedTransac
           )}
         </p>
         <p className="truncate text-xs text-zinc-400">
-          {formatDate(transaction.date)}
-          {subtitle ? ` · ${subtitle}` : ""}
+          {[hideDate ? null : formatDate(transaction.date), subtitle || null].filter(Boolean).join(" · ")}
         </p>
       </div>
       <div className="flex-shrink-0 text-right">
